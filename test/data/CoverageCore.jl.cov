@@ -3,10 +3,10 @@
         - # comparison input during tests of '*.cov' input and against
         7 # the tracefile 'expected.info' to verify LCOV.readfile/LCOV.writefile
         - #######################################################################
-        - module Coverage
-        - 
+        - module CoverageCore
+        -
         -     import JuliaParser.Parser
-        - 
+        -
         -     # process_cov
         -     # Given a .cov file, return the counts for each line, where the
         -     # lines that can't be counted are denoted with a -1
@@ -77,7 +77,7 @@
         -         end
         1         covered, tot
         -     end
-        - 
+        -
        24     function_body_lines(ast) = function_body_lines!(Int[], ast, false)
       339     function_body_lines!(flines, arg, infunction) = flines
         -     function function_body_lines!(flines, node::LineNumberNode, infunction)
@@ -101,13 +101,13 @@
         -         end
       300         flines
         -     end
-        - 
+        -
         -     export Coveralls
         -     module Coveralls
         -         using Requests
-        -         using Coverage
+        -         using CoverageCore
         -         using JSON
-        - 
+        -
         -         # coveralls_process_file
         -         # Given a .jl file, return the Coveralls.io dictionary for this
         -         # file by reading in the file and its matching .cov. Don't convert
@@ -124,7 +124,7 @@
         -                     "source" => readall(filename),
         -                     "coverage" => amend_coverage_from_src!(process_cov(filename*".cov"), filename))
         -         end
-        - 
+        -
         -         # coveralls_process_src
         -         # Recursively walk through a Julia package's src/ folder
         -         # and collect coverage statistics
@@ -152,7 +152,7 @@
         -             end
         1             return source_files
         -         end
-        - 
+        -
         -         # submit
         -         # Submit coverage to Coveralls.io
         -         # https://coveralls.io/docs/api
@@ -181,7 +181,7 @@
         -                 [FileParam(JSON.json(data),"application/json","json_file","coverage.json")])
         -             dump(r.data)
         -         end
-        - 
+        -
         -         function submit_token(source_files)
         -             data = @compat Dict("repo_token" => ENV["REPO_TOKEN"],
         -                     "source_files" => source_files)
@@ -190,17 +190,17 @@
         -             dump(r.data)
         -         end
         -     end  # module Coveralls
-        - 
-        - 
+        -
+        -
         -     ## Analyzing memory allocation
         -     immutable MallocInfo
         -         bytes::Int
         -         filename::UTF8String
         -         linenumber::Int
         -     end
-        - 
+        -
       547     sortbybytes(a::MallocInfo, b::MallocInfo) = a.bytes < b.bytes
-        - 
+        -
         -     function analyze_malloc_files(files)
         2         bc = MallocInfo[]
         2         for filename in files
@@ -217,7 +217,7 @@
         -         end
         2         sort(bc, lt=sortbybytes)
         -     end
-        - 
+        -
         -     function find_malloc_files(dirs)
         1         files = ByteString[]
         1         for dir in dirs
@@ -234,14 +234,14 @@
         1         files
         -     end
         -     find_malloc_files(file::ByteString) = find_malloc_files([file])
-        - 
+        -
         1     analyze_malloc(dirs) = analyze_malloc_files(find_malloc_files(dirs))
         1     analyze_malloc(dir::ByteString) = analyze_malloc([dir])
-        - 
-        -     # Support Unix command line usage like `julia Coverage.jl $(find ~/.julia/v0.3 -name "*.jl.mem")`
+        -
+        -     # Support Unix command line usage like `julia CoverageCore.jl $(find ~/.julia/v0.3 -name "*.jl.mem")`
         -     if !isinteractive()
         -         bc = analyze_malloc_files(ARGS)
         -         println(bc)
         -     end
         - end
-        - 
+        -

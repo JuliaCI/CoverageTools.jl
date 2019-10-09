@@ -1,10 +1,10 @@
 #######################################################################
-# Coverage.jl
+# CoverageCore.jl
 # Input: Code coverage and memory allocations
 # Output: Useful things
-# https://github.com/JuliaCI/Coverage.jl
+# https://github.com/JuliaCI/CoverageCore.jl
 #######################################################################
-module Coverage
+module CoverageCore
     using LibGit2
 
     export process_folder, process_file
@@ -125,7 +125,7 @@ module Coverage
         if isempty(files)
             # ... we will assume that, as there is a .jl file, it was
             # just never run. We'll report the coverage as all null.
-            @info """Coverage.process_cov: Coverage file(s) for $filename do not exist.
+            @info """CoverageCore.process_cov: Coverage file(s) for $filename do not exist.
                                               Assuming file has no coverage."""
             nlines = countlines(filename)
             return fill!(Vector{CovCount}(undef, nlines), nothing)
@@ -133,7 +133,7 @@ module Coverage
         # Keep track of the combined coverage
         full_coverage = CovCount[]
         for file in files
-            @info "Coverage.process_cov: processing $file"
+            @info "CoverageCore.process_cov: processing $file"
             coverage = CovCount[]
             for line in eachline(file)
                 # Columns 1:9 contain the coverage count
@@ -214,7 +214,7 @@ module Coverage
     function process_file end
 
     function process_file(filename, folder)
-        @info "Coverage.process_file: Detecting coverage for $filename"
+        @info "CoverageCore.process_file: Detecting coverage for $filename"
         coverage = process_cov(filename, folder)
         fc = FileCoverage(filename, read(filename, String), coverage)
         if get(ENV, "DISABLE_AMEND_COVERAGE_FROM_SRC", "no") != "yes"
@@ -230,10 +230,10 @@ module Coverage
     Process the contents of a folder of Julia source code to collect coverage
     statistics for all the files contained within. Will recursively traverse
     child folders. Default folder is "src", which is useful for the primary case
-    where Coverage is called from the root directory of a package.
+    where CoverageCore is called from the root directory of a package.
     """
     function process_folder(folder="src")
-        @info "Coverage.process_folder: Searching $folder for .jl files..."
+        @info "CoverageCore.process_folder: Searching $folder for .jl files..."
         source_files = FileCoverage[]
         files = readdir(folder)
         for file in files
@@ -243,7 +243,7 @@ module Coverage
                 if splitext(fullfile)[2] == ".jl"
                     push!(source_files, process_file(fullfile, folder))
                 else
-                    @debug "Coverage.process_folder: Skipping $file, not a .jl file"
+                    @debug "CoverageCore.process_folder: Skipping $file, not a .jl file"
                 end
             elseif isdir(fullfile)
                 # If it is a folder, recursively traverse
@@ -304,8 +304,6 @@ module Coverage
         end
     end
 
-    include("coveralls.jl")
-    include("codecovio.jl")
     include("lcov.jl")
     include("memalloc.jl")
     include("parser.jl")
