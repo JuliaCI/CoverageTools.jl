@@ -1,12 +1,20 @@
 language: julia
+os:
+  - linux
+  - osx
+  - windows
 julia:
-  - 1.0
-  - 1.1
+  - "1.0"
+  - "1.2"
   - nightly
+
+matrix:
+  allow_failures:
+  - julia: nightly
+  fast_finish: true
 
 notifications:
     email: false
 
 script:
   - julia --check-bounds=yes etc/travis-test.jl
-  
