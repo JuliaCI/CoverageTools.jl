@@ -9,4 +9,4 @@ Pkg.add("Coverage")
 import Coverage
 coverage_cov_res = Coverage.process_folder()
 Coverage.Codecov.submit(coverage_cov_res)
-# Coverage.Coveralls.submit(coverage_cov_res)
+Coverage.Coveralls.submit(coverage_cov_res)
