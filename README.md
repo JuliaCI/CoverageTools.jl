@@ -6,4 +6,6 @@ CoverageCore.jl - you probably want [Coverage.jl](https://github.com/JuliaCI/Cov
 [![Coverage Status](https://coveralls.io/repos/github/JuliaCI/CoverageCore.jl/badge.svg?branch=master)](https://coveralls.io/github/JuliaCI/CoverageCore.jl?branch=master)
 [![codecov](https://codecov.io/gh/JuliaCI/CoverageCore.jl/branch/master/graph/badge.svg)](https://codecov.io/gh/JuliaCI/CoverageCore.jl)
 
-This package provides the core functionality for processing code coverage.
+CoverageCore.jl provides the core functionality for processing code coverage.
+
+Most users will want to use [Coverage.jl](https://github.com/JuliaCI/Coverage.jl) instead. [Coverage.jl](https://github.com/JuliaCI/Coverage.jl) allows you to upload your coverage reports to online services such as Codecov.io and Coveralls.io.
