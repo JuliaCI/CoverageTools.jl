@@ -3,15 +3,15 @@
 
 export LCOV
 """
-CoverageCore.LCOV Module
+CoverageTools.LCOV Module
 
 This module provides functionality to generate LCOV info format files from
 Julia coverage data. It exports the `writefile` function.
 """
 module LCOV
 
-using CoverageCore
-using CoverageCore: CovCount
+using CoverageTools
+using CoverageTools: CovCount
 
 export writefile, readfile
 
@@ -120,7 +120,7 @@ Will recursively traverse child folders.
 Post-process with `merge_coverage_counts(coverages)` to combine duplicates.
 """
 function readfolder(folder)
-    @info """CoverageCore.LCOV.readfolder: Searching $folder for .info files..."""
+    @info """CoverageTools.LCOV.readfolder: Searching $folder for .info files..."""
     source_files = FileCoverage[]
     files = readdir(folder)
     for file in files
@@ -130,7 +130,7 @@ function readfolder(folder)
             if endswith(fullfile, ".info")
                 append!(source_files, readfile(fullfile))
             else
-                @debug "CoverageCore.LCOV.readfolder: Skipping $file, not a .info file"
+                @debug "CoverageTools.LCOV.readfolder: Skipping $file, not a .info file"
             end
         elseif isdir(fullfile)
             # If it is a folder, recursively traverse

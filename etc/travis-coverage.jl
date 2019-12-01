@@ -1,5 +1,5 @@
-import CoverageCore
-coveragecore_cov_res = CoverageCore.process_folder()
+import CoverageTools
+coveragetools_cov_res = CoverageTools.process_folder()
 
 import Pkg
 Pkg.add("Coverage")
