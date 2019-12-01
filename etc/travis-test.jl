@@ -1,3 +1,3 @@
 using Pkg
 Pkg.build()
-Pkg.test("CoverageCore"; coverage=true)
+Pkg.test("CoverageTools"; coverage=true)

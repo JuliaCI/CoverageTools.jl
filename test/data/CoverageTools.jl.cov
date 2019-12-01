@@ -3,7 +3,7 @@
         - # comparison input during tests of '*.cov' input and against
         7 # the tracefile 'expected.info' to verify LCOV.readfile/LCOV.writefile
         - #######################################################################
-        - module CoverageCore
+        - module CoverageTools
         -
         -     import JuliaParser.Parser
         -
@@ -105,7 +105,7 @@
         -     export Coveralls
         -     module Coveralls
         -         using Requests
-        -         using CoverageCore
+        -         using CoverageTools
         -         using JSON
         -
         -         # coveralls_process_file
@@ -238,7 +238,7 @@
         1     analyze_malloc(dirs) = analyze_malloc_files(find_malloc_files(dirs))
         1     analyze_malloc(dir::ByteString) = analyze_malloc([dir])
         -
-        -     # Support Unix command line usage like `julia CoverageCore.jl $(find ~/.julia/v0.3 -name "*.jl.mem")`
+        -     # Support Unix command line usage like `julia CoverageTools.jl $(find ~/.julia/v0.3 -name "*.jl.mem")`
         -     if !isinteractive()
         -         bc = analyze_malloc_files(ARGS)
         -         println(bc)
