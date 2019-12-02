@@ -1,5 +1,5 @@
 name = "CoverageTools"
-uuid = "5c0200ba-f6cc-4d9c-a80b-82aea8bba5d6"
+uuid = "c36e975a-824b-4404-a568-ef97ca766997"
 authors = ["Iain Dunning <iaindunning@gmail.com>"]
 version = "1.0.0"
 
