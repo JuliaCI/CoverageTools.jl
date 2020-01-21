@@ -215,7 +215,6 @@ module CoverageTools
 
                 # also check for line markers
                 if excluded || occursin("COV_EXCL_LINE", line)
-                    @debug "removing line $l: $line"
                     coverage[l] = nothing
                 end
             end
