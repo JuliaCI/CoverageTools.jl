@@ -201,6 +201,25 @@ module CoverageTools
                 end
             end
         end
+
+        # check for excluded lines
+        let io = IOBuffer(content)
+            excluded = false
+            for (l, line) in enumerate(eachline(io))
+                # check for start/stop markers
+                if occursin("COV_EXCL_START", line)
+                    excluded = true
+                elseif occursin("COV_EXCL_STOP", line)
+                    excluded = false
+                end
+
+                # also check for line markers
+                if excluded || occursin("COV_EXCL_LINE", line)
+                    coverage[l] = nothing
+                end
+            end
+        end
+
         nothing
     end
 
