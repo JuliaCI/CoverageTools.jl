@@ -151,6 +151,19 @@ end
         @test isfile(joinpath(datadir_temp, "CoverageTools.jl"))
         # tear down test data
         rm(datadir_temp; recursive=true)
+
+        # test exclusion markers
+        srcname = joinpath("test", "exclusions.jl")
+        covname = srcname*".cov"
+        clean_file(srcname)
+        cmdstr = "include($(repr(srcname))); main()"
+        run(`$(Base.julia_cmd()) --startup-file=no --code-coverage=user -e $cmdstr`)
+        r = withenv("DISABLE_AMEND_COVERAGE_FROM_SRC" => "yes") do
+            process_file(srcname, "test")
+        end
+        @test r.coverage == [nothing, 2, 1, 1, nothing, 1, nothing, 1, nothing, nothing]
+        amend_coverage_from_src!(r.coverage, r.filename)
+        @test r.coverage == [nothing, 2, nothing, 1, nothing, nothing, nothing, 1, nothing, nothing]
     end
 end
 
