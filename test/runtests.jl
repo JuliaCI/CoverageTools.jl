@@ -79,7 +79,7 @@ end
         rm(lcov)
 
         # test that reading the LCOV file gives the same data
-        lcov = LCOV.readfolder(datadir)
+        lcov = process_folder(datadir; jl = false)
         @test length(lcov) == 1
         r2 = lcov[1]
         r2_filename = r2.filename
@@ -127,7 +127,7 @@ end
 
         covtarget = (sum(x->x !== nothing && x > 0, target), sum(x->x !== nothing, target))
         @test get_summary(r) == covtarget
-        @test get_summary(process_folder(datadir)) == (98, 106)
+        @test get_summary(process_folder(datadir; info = false)) == (98, 106)
 
         r_disabled = withenv("DISABLE_AMEND_COVERAGE_FROM_SRC" => "yes") do
             process_file(srcname, datadir)

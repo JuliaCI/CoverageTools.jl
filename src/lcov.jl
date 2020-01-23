@@ -112,32 +112,6 @@ function readfile(infofile::AbstractString)
     return source_files
 end
 
-"""
-    readfolder(folder) -> Vector{FileCoverage}
-
-Process the contents of a folder of LCOV files to collect coverage statistics.
-Will recursively traverse child folders.
-Post-process with `merge_coverage_counts(coverages)` to combine duplicates.
-"""
-function readfolder(folder)
-    @info """CoverageTools.LCOV.readfolder: Searching $folder for .info files..."""
-    source_files = FileCoverage[]
-    files = readdir(folder)
-    for file in files
-        fullfile = joinpath(folder, file)
-        if isfile(fullfile)
-            # Is it a tracefile?
-            if endswith(fullfile, ".info")
-                append!(source_files, readfile(fullfile))
-            else
-                @debug "CoverageTools.LCOV.readfolder: Skipping $file, not a .info file"
-            end
-        elseif isdir(fullfile)
-            # If it is a folder, recursively traverse
-            append!(source_files, readfolder(fullfile))
-        end
-    end
-    return source_files
-end
+@deprecate readfolder(folder) process_folder(folder; jl = true)
 
 end

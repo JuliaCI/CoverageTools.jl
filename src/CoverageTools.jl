@@ -33,6 +33,8 @@ module CoverageTools
         coverage::Vector{CovCount}
     end
 
+    include("lcov.jl")
+
     """
         get_summary(fcs)
 
@@ -244,29 +246,33 @@ module CoverageTools
     process_file(filename) = process_file(filename, splitdir(filename)[1])
 
     """
-        process_folder(folder="src") -> Vector{FileCoverage}
+        process_folder(folder="src"; jl = true, info = true) -> Vector{FileCoverage}
 
     Process the contents of a folder of Julia source code to collect coverage
     statistics for all the files contained within. Will recursively traverse
     child folders. Default folder is "src", which is useful for the primary case
-    where CoverageTools is called from the root directory of a package.
+    where CoverageTools is called from the root directory of a package. By
+    default, will process both `.jl` and `.info` files.
     """
-    function process_folder(folder="src")
-        @info "CoverageTools.process_folder: Searching $folder for .jl files..."
+    function process_folder(folder="src"; jl = true, info = true)
+        jl && @info "CoverageTools.process_folder: Searching $folder for .jl files..."
+        info && @info "CoverageTools.process_folder: Searching $folder for .info files..."
         source_files = FileCoverage[]
         files = readdir(folder)
         for file in files
             fullfile = joinpath(folder, file)
             if isfile(fullfile)
                 # Is it a Julia file?
-                if splitext(fullfile)[2] == ".jl"
+                if jl && splitext(fullfile)[2] == ".jl"
                     push!(source_files, process_file(fullfile, folder))
+                elseif info && splitext(fullfile)[2] == ".info"
+                    append!(source_files, LCOV.readfile(fullfile))
                 else
-                    @debug "CoverageTools.process_folder: Skipping $file, not a .jl file"
+                    @debug "CoverageTools.process_folder: Skipping $file, not a .jl or .info file"
                 end
             elseif isdir(fullfile)
                 # If it is a folder, recursively traverse
-                append!(source_files, process_folder(fullfile))
+                append!(source_files, process_folder(fullfile; jl = jl, info = info))
             end
         end
         return source_files
@@ -323,7 +329,6 @@ module CoverageTools
         end
     end
 
-    include("lcov.jl")
     include("memalloc.jl")
     include("parser.jl")
 end
