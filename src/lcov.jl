@@ -112,6 +112,6 @@ function readfile(infofile::AbstractString)
     return source_files
 end
 
-@deprecate readfolder(folder) process_folder(folder; jl = true)
+@deprecate readfolder(folder) process_folder(folder; jl = false)
 
 end
