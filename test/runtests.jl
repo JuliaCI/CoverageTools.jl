@@ -6,7 +6,7 @@
 
 using CoverageTools, Test, LibGit2
 
-if VERSION < v"1.1"
+if VERSION < v"1.1-"
 isnothing(x) = false
 isnothing(x::Nothing) = true
 end
@@ -117,17 +117,21 @@ end
         run(`$(Base.julia_cmd()) --startup-file=no --code-coverage=user -e $cmdstr`)
         r = process_file(srcname, datadir)
 
-        target = if VERSION >= v"1.5.0-DEV.42"
-            CoverageTools.CovCount[nothing, 1, nothing, 0, nothing, 0, nothing, nothing, nothing, nothing, 0, nothing, nothing, nothing, nothing, nothing, 0, nothing, nothing, 0, nothing, nothing, nothing, nothing, nothing, nothing, nothing, nothing]
+        target = if VERSION >= v"1.5-"
+            CoverageTools.CovCount[nothing, 1, nothing, 0, nothing, 0, nothing, nothing, nothing, nothing, 0, nothing, nothing, nothing, nothing, 0, 0, nothing, nothing, 0, nothing, nothing, nothing, nothing, nothing, nothing, nothing, nothing]
         else
             CoverageTools.CovCount[nothing, 2, nothing, 0, nothing, 0, nothing, nothing, nothing, nothing, 0, nothing, nothing, nothing, nothing, nothing, 0, nothing, nothing, 0, nothing, nothing, nothing, nothing, nothing, nothing, nothing, nothing, nothing]
         end
         target_disabled = map(x -> (x !== nothing && x > 0) ? x : nothing, target)
         @test r.coverage == target
 
-        covtarget = (sum(x->x !== nothing && x > 0, target), sum(x->x !== nothing, target))
+        covtarget = (sum(x -> x !== nothing && x > 0, target), sum(!isnothing, target))
         @test get_summary(r) == covtarget
-        @test get_summary(process_folder(datadir)) == (98, 106)
+        if VERSION >= v"1.5-"
+            @test get_summary(process_folder(datadir)) == (98, 107)
+        else
+            @test get_summary(process_folder(datadir)) == (98, 106)
+        end
 
         r_disabled = withenv("DISABLE_AMEND_COVERAGE_FROM_SRC" => "yes") do
             process_file(srcname, datadir)
@@ -166,17 +170,21 @@ end
             process_file(srcname, "test")
         end
         # FIXME: coverage information for this function is useless with Julia 1.0
-        if VERSION >= v"1.1"
-            @test r.coverage == if VERSION >= v"1.5.0-DEV.42"
-                [nothing, 1, 1, 1, nothing, 1, nothing, 1, nothing]
+        if VERSION >= v"1.1-"
+            if VERSION >= v"1.6-"
+                @test r.coverage == [1, 1, 1, 1, nothing, 1, nothing, 1, nothing]
+            elseif VERSION >= v"1.5-"
+                @test r.coverage == [nothing, 1, 1, 1, nothing, 1, nothing, 1, nothing]
             else
-                [nothing, 2, 1, 1, nothing, 1, nothing, 1, nothing, nothing]
+                @test r.coverage == [nothing, 2, 1, 1, nothing, 1, nothing, 1, nothing, nothing]
             end
             amend_coverage_from_src!(r.coverage, r.filename)
-            @test r.coverage == if VERSION >= v"1.5.0-DEV.42"
-                [nothing, 1, nothing, 1, nothing, nothing, nothing, 1, nothing]
+            if VERSION >= v"1.6-"
+                @test r.coverage == [1, 1, nothing, 1, nothing, nothing, nothing, 1, nothing]
+            elseif VERSION >= v"1.5-"
+                @test r.coverage == [nothing, 1, nothing, 1, nothing, nothing, nothing, 1, nothing]
             else
-                [nothing, 2, nothing, 1, nothing, nothing, nothing, 1, nothing, nothing]
+                @test r.coverage == [nothing, 2, nothing, 1, nothing, nothing, nothing, 1, nothing, nothing]
             end
         end
     end
