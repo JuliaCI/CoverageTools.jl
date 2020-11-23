@@ -174,32 +174,38 @@ module CoverageTools
             end
             push!(linepos, position(io))
         end
-        pos = 1
-        while pos <= length(content)
-            # We now want to convert the one-based offset pos into a line
-            # number, by looking it up in linepos. But linepos[i] contains the
-            # zero-based offset of the start of line i; since pos is
-            # one-based, we have to subtract 1 before searching through
-            # linepos. The result is a one-based line number; since we use
-            # that later on to shift other one-based line numbers, we must
-            # subtract 1 from the offset to make it zero-based.
-            lineoffset = searchsortedlast(linepos, pos - 1) - 1
+        pos, lineoffset = 1, 0
+        try
+            while pos <= length(content)
+                # We now want to convert the one-based offset pos into a line
+                # number, by looking it up in linepos. But linepos[i] contains the
+                # zero-based offset of the start of line i; since pos is
+                # one-based, we have to subtract 1 before searching through
+                # linepos. The result is a one-based line number; since we use
+                # that later on to shift other one-based line numbers, we must
+                # subtract 1 from the offset to make it zero-based.
+                lineoffset = searchsortedlast(linepos, pos - 1) - 1
 
-            # now we can parse the next chunk of the input
-            ast, pos = Meta.parse(content, pos)
-            isa(ast, Expr) || continue
-            flines = function_body_lines(ast, coverage, lineoffset)
-            if !isempty(flines)
-                flines .+= lineoffset
-                for l in flines
-                    if l > length(coverage)
-                        resize!(coverage, l)
-                    end
-                    if coverage[l] === nothing
-                        coverage[l] = 0
+                # now we can parse the next chunk of the input
+                ast, pos = Meta.parse(content, pos)
+                isa(ast, Expr) || continue
+                flines = function_body_lines(ast, coverage, lineoffset)
+                if !isempty(flines)
+                    flines .+= lineoffset
+                    for l in flines
+                        if l > length(coverage)
+                            resize!(coverage, l)
+                        end
+                        if coverage[l] === nothing
+                            coverage[l] = 0
+                        end
                     end
                 end
             end
+        catch err
+            errkind = isa(err, Meta.ParseError) ? "parsing error" : "error"
+            @error "$errkind in $(fc.filename), successfully handled up to line $lineoffset"
+            rethrow()
         end
 
         # check for excluded lines

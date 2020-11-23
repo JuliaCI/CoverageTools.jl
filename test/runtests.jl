@@ -188,6 +188,19 @@ end
             end
         end
     end
+
+    srcdir = joinpath(@__DIR__, "BustedPackage", "src")
+    clean_folder(srcdir)
+    cmdstr = "using BustedPackage; BustedPackage.greet()"
+    cd("BustedPackage") do
+        run(`$(Base.julia_cmd()) --startup-file=no --code-coverage=user --project -e $cmdstr`)
+    end
+    @test_logs (:info, r"Detecting coverage.*parseerr.jl") (:info, r"Assuming file has no coverage") (:error, r"parsing error in .*parseerr.jl, successfully handled up to line 3") try
+        r = process_file(joinpath(srcdir, "parseerr.jl"), srcdir)
+    catch err
+        @test isa(err, Base.Meta.ParseError)
+    end
+
 end
 
 end # of withenv("DISABLE_AMEND_COVERAGE_FROM_SRC" => nothing)
