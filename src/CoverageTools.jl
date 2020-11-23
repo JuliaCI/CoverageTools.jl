@@ -237,7 +237,11 @@ module CoverageTools
         coverage = process_cov(filename, folder)
         fc = FileCoverage(filename, read(filename, String), coverage)
         if get(ENV, "DISABLE_AMEND_COVERAGE_FROM_SRC", "no") != "yes"
-            amend_coverage_from_src!(fc)
+            try
+                amend_coverage_from_src!(fc)
+            catch err
+                @error "coverage could not incorporate source file $filename, it may have a parsing error" exception=err
+            end
         end
         return fc
     end
