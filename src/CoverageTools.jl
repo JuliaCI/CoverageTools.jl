@@ -240,7 +240,7 @@ module CoverageTools
             try
                 amend_coverage_from_src!(fc)
             catch err
-                @error "coverage could not incorporate source file $filename, it may have a parsing error" exception=err
+                @error "coverage could not incorporate source file $filename, it may have a parsing error" exception=(err,catch_backtrace())
             end
         end
         return fc
