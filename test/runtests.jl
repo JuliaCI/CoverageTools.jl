@@ -196,7 +196,7 @@ end
         run(`$(Base.julia_cmd()) --startup-file=no --code-coverage=user --project -e $cmdstr`)
     end
     bustedfile = joinpath(srcdir, "parseerr.jl")
-    @test_throws Base.Meta.ParseError("parsing error in $bustedfile, successfully handled up to line 6") process_file(bustedfile, srcdir)
+    @test_throws Base.Meta.ParseError("parsing error in $bustedfile:7: space before \"[\" not allowed in \"i [\"") process_file(bustedfile, srcdir)
 
 end
 
