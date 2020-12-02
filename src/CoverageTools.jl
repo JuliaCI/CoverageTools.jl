@@ -186,8 +186,12 @@ module CoverageTools
             lineoffset = searchsortedlast(linepos, pos - 1) - 1
 
             # now we can parse the next chunk of the input
-            ast, pos = Meta.parse(content, pos)
+            ast, pos = Meta.parse(content, pos; raise=false)
             isa(ast, Expr) || continue
+            if ast.head ∈ (:error, :incomplete)
+                line = searchsortedlast(linepos, pos - 1)
+                throw(Base.Meta.ParseError("parsing error in $(fc.filename):$line: $(ast.args[1])"))
+            end
             flines = function_body_lines(ast, coverage, lineoffset)
             if !isempty(flines)
                 flines .+= lineoffset

@@ -188,6 +188,20 @@ end
             end
         end
     end
+
+    srcdir = joinpath(@__DIR__, "BustedPackage", "src")
+    clean_folder(srcdir)
+    cmdstr = "using BustedPackage; BustedPackage.greet()"
+    cd("BustedPackage") do
+        run(`$(Base.julia_cmd()) --startup-file=no --code-coverage=user --project -e $cmdstr`)
+    end
+    bustedfile = joinpath(srcdir, "parseerr.jl")
+    msg = "parsing error in $bustedfile:7: space before \"[\" not allowed in \"i [\""
+    if VERSION >= v"1.5"
+        msg *= " at none:4"
+    end
+    @test_throws Base.Meta.ParseError(msg) process_file(bustedfile, srcdir)
+
 end
 
 end # of withenv("DISABLE_AMEND_COVERAGE_FROM_SRC" => nothing)
