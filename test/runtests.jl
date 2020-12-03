@@ -196,9 +196,12 @@ end
         run(`$(Base.julia_cmd()) --startup-file=no --code-coverage=user --project -e $cmdstr`)
     end
     bustedfile = joinpath(srcdir, "parseerr.jl")
-    msg = "parsing error in $bustedfile:7: space before \"[\" not allowed in \"i [\""
-    if VERSION >= v"1.5"
-        msg *= " at none:4"
+    if VERSION.major == 1 && VERSION.minor < 5
+        msg = "parsing error in $bustedfile:7: space before \"[\" not allowed in \"i [\""
+    elseif VERSION.major == 1 && VERSION.minor == 5
+        msg = "parsing error in $bustedfile:7: space before \"[\" not allowed in \"i [\" at none:4"
+    else
+        msg = "parsing error in $bustedfile:7: invalid iteration specification"
     end
     @test_throws Base.Meta.ParseError(msg) process_file(bustedfile, srcdir)
 
