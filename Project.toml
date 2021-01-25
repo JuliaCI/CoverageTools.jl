@@ -1,7 +1,7 @@
 name = "CoverageTools"
 uuid = "c36e975a-824b-4404-a568-ef97ca766997"
 authors = ["Iain Dunning <iaindunning@gmail.com>"]
-version = "1.2.1"
+version = "1.2.2"
 
 [deps]
 LibGit2 = "76f85450-5226-5b5a-8eaa-529ad045b433"
