@@ -241,4 +241,22 @@ end # testset
     end
 end
 
+@testset "CoverageTools.jl" begin
+    @testset "clean_file" begin
+        mktempdir() do tmp_dir
+            cd(tmp_dir) do
+                source_file = joinpath(tmp_dir, "foo.jl")
+                cov_file = joinpath(tmp_dir, "foo.jl.12345.cov")
+                touch(source_file)
+                touch(cov_file)
+                @test isfile(source_file)
+                @test isfile(cov_file)
+                CoverageTools.clean_file(source_file)
+                @test isfile(source_file)
+                @test !isfile(cov_file)
+            end
+        end
+    end
+end
+
 end # withenv
