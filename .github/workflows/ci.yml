@@ -16,6 +16,7 @@ jobs:
       matrix:
         version:
           - '1.0'
+          - '1.6'
           - '1'
           - 'nightly'
         os:
@@ -42,12 +43,22 @@ jobs:
       - uses: julia-actions/julia-runtest@v1
       - uses: julia-actions/julia-processcoverage@v1
       - uses: codecov/codecov-action@v1
+        # (NOT pull request) OR ( (pull request) AND (NOT from a fork) )
+        # In this case, secrets are available, so we can use the `CODECOV_TOKEN`.
+        if: github.event_name != 'pull_request' || github.repository == github.event.pull_request.head.repo.full_name
+        with:
+          file: lcov.info
+          token: ${{ secrets.CODECOV_TOKEN }}
+      - uses: codecov/codecov-action@v1
+        # (pull request) AND (from a fork)
+        # In this case, secrets are NOT available, so we have to rely on Codecov's "tokenless uploads for GitHub Actions" feature.
+        if: github.event_name == 'pull_request' && github.repository != github.event.pull_request.head.repo.full_name
         with:
           file: lcov.info
       - uses: coverallsapp/github-action@master
         with:
-          github-token: ${{ secrets.github_token }}
           path-to-lcov: lcov.info
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           flag-name: run-${{ matrix.test_number }}
           parallel: true
   finish:
@@ -57,5 +68,5 @@ jobs:
     - name: Coveralls Finished
       uses: coverallsapp/github-action@master
       with:
-        github-token: ${{ secrets.github_token }}
+        github-token: ${{ secrets.GITHUB_TOKEN }}
         parallel-finished: true
