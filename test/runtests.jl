@@ -1,17 +1,11 @@
-#######################################################################
-# CoverageTools.jl
-# Take Julia test coverage results and bundle them up in JSONs
-# https://github.com/JuliaCI/CoverageTools.jl
-#######################################################################
-
-using CoverageTools, Test
+using CoverageTools
+using Test
 
 if VERSION < v"1.1-"
-isnothing(x) = false
-isnothing(x::Nothing) = true
+    isnothing(x) = false
+    isnothing(x::Nothing) = true
 end
 
-@testset "CoverageTools" begin
 withenv("DISABLE_AMEND_COVERAGE_FROM_SRC" => nothing) do
 
 @testset "iscovfile" begin
@@ -30,7 +24,7 @@ withenv("DISABLE_AMEND_COVERAGE_FROM_SRC" => nothing) do
     @test CoverageTools.iscovfile("test.jl.8392.cov", "test.jl")
     @test CoverageTools.iscovfile("/somedir/test.jl.8392.cov", "/somedir/test.jl")
     @test !CoverageTools.iscovfile("/otherdir/test.jl.cov", "/somedir/test.jl")
-end
+end # testset
 
 @testset "isfuncexpr" begin
     @test CoverageTools.isfuncexpr(:(f() = x))
@@ -43,7 +37,7 @@ end
     @test CoverageTools.isfuncexpr(:(x -> x))
     @test CoverageTools.isfuncexpr(:(f() where A = x))
     @test CoverageTools.isfuncexpr(:(f() where A where B = x))
-end
+end # testset
 
 @testset "Processing coverage" begin
     cd(dirname(@__DIR__)) do
@@ -204,9 +198,12 @@ end
         msg = "parsing error in $bustedfile:7: invalid iteration specification"
     end
     @test_throws Base.Meta.ParseError(msg) process_file(bustedfile, srcdir)
+end # testset
+    
+@testset "types" begin
+    a = CoverageTools.MallocInfo(1, "", 1)
+    b = CoverageTools.MallocInfo(2, "", 1)
+    @test CoverageTools.sortbybytes(a, b)
+end # testset
 
-end
-
-end # of withenv("DISABLE_AMEND_COVERAGE_FROM_SRC" => nothing)
-
-end # of @testset "CoverageTools"
+end # withenv

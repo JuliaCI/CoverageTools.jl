@@ -195,9 +195,7 @@ module CoverageTools
             if !isempty(flines)
                 flines .+= lineoffset
                 for l in flines
-                    if l > length(coverage)
-                        resize!(coverage, l)
-                    end
+                    (l > length(coverage)) && resize!(coverage, l)
                     if coverage[l] === nothing
                         coverage[l] = 0
                     end
