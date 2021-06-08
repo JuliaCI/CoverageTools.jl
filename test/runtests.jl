@@ -4,7 +4,7 @@
 # https://github.com/JuliaCI/CoverageTools.jl
 #######################################################################
 
-using CoverageTools, Test, LibGit2
+using CoverageTools, Test
 
 if VERSION < v"1.1-"
 isnothing(x) = false

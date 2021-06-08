@@ -5,7 +5,6 @@
 # https://github.com/JuliaCI/CoverageTools.jl
 #######################################################################
 module CoverageTools
-    using LibGit2
 
     export process_folder, process_file
     export clean_folder, clean_file
