@@ -1,6 +1,6 @@
 name = "CoverageTools"
 uuid = "c36e975a-824b-4404-a568-ef97ca766997"
-authors = ["Iain Dunning <iaindunning@gmail.com>"]
+authors = ["Iain Dunning <iaindunning@gmail.com>", "contributors"]
 version = "1.2.7"
 
 [compat]
