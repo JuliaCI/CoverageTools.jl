@@ -29,6 +29,9 @@ jobs:
             arch: x86
           - version: '1'
             os: windows-latest
+            arch: x86
+          - version: '1'
+            os: windows-latest
             arch: x64
           - version: '1'
             os: macos-latest
@@ -55,18 +58,3 @@ jobs:
         if: github.event_name == 'pull_request' && github.repository != github.event.pull_request.head.repo.full_name
         with:
           file: lcov.info
-      - uses: coverallsapp/github-action@master
-        with:
-          path-to-lcov: lcov.info
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          flag-name: run-${{ matrix.test_number }}
-          parallel: true
-  finish:
-    needs: test
-    runs-on: ubuntu-latest
-    steps:
-    - name: Coveralls Finished
-      uses: coverallsapp/github-action@master
-      with:
-        github-token: ${{ secrets.GITHUB_TOKEN }}
-        parallel-finished: true

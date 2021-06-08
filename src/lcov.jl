@@ -2,6 +2,7 @@
 # can be parsed by a variety of useful utilities to display coverage info
 
 export LCOV
+
 """
 CoverageTools.LCOV Module
 
@@ -140,4 +141,4 @@ function readfolder(folder)
     return source_files
 end
 
-end
+end # module
