@@ -6,20 +6,6 @@ if Base.VERSION < v"1.1"
     isnothing(x::Nothing) = true
 end
 
-if Base.VERSION < v"1.4"
-    function only(x::Array)
-        i = iterate(x)
-        if i === nothing
-            throw(ArgumentError("Collection is empty, must contain exactly 1 element"))
-        end
-        (ret, state) = i::NTuple{2,Any}
-        if iterate(x, state) !== nothing
-            throw(ArgumentError("Collection has multiple elements, must contain exactly 1 element"))
-        end
-        return ret
-    end
-end
-
 withenv("DISABLE_AMEND_COVERAGE_FROM_SRC" => nothing) do
 
 @testset "iscovfile" begin
@@ -235,16 +221,23 @@ end # testset
             ast = Meta.parse(code)
             # remove the top-level line number nodes
             filter!(x -> !(x isa LineNumberNode), ast.args[end].args)
-            flines = []
             coverage = CoverageTools.CovCount[]
             lineoffset = 1
             infunction = false
-            @test length(flines) == 0
+            flines = []
             CoverageTools.function_body_lines!(flines, ast, coverage, lineoffset, infunction)
-            @test length(flines) == 1
-            @test only(flines) == 4
+            @test flines == [4]
         end
 
+        @testset "ast.head == :line" begin
+            ast = Expr(:line, 12345, nothing)
+            coverage = CoverageTools.CovCount[]
+            lineoffset = 1
+            infunction = true
+            flines = []
+            CoverageTools.function_body_lines!(flines, ast, coverage, lineoffset, infunction)
+            @test flines == [12345]
+        end
     end
 end
 
