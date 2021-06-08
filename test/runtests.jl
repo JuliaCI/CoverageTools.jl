@@ -1,9 +1,23 @@
 using CoverageTools
 using Test
 
-if VERSION < v"1.1-"
+if Base.VERSION < v"1.1"
     isnothing(x) = false
     isnothing(x::Nothing) = true
+end
+
+if Base.VERSION < v"1.4"
+    function only(x::Array)
+        i = iterate(x)
+        if i === nothing
+            throw(ArgumentError("Collection is empty, must contain exactly 1 element"))
+        end
+        (ret, state) = i::NTuple{2,Any}
+        if iterate(x, state) !== nothing
+            throw(ArgumentError("Collection has multiple elements, must contain exactly 1 element"))
+        end
+        return ret
+    end
 end
 
 withenv("DISABLE_AMEND_COVERAGE_FROM_SRC" => nothing) do
@@ -199,11 +213,39 @@ end # testset
     end
     @test_throws Base.Meta.ParseError(msg) process_file(bustedfile, srcdir)
 end # testset
-    
-@testset "types" begin
-    a = CoverageTools.MallocInfo(1, "", 1)
-    b = CoverageTools.MallocInfo(2, "", 1)
-    @test CoverageTools.sortbybytes(a, b)
+
+@testset "malloc.jl" begin
+    @testset "types" begin
+        a = CoverageTools.MallocInfo(1, "", 1)
+        b = CoverageTools.MallocInfo(2, "", 1)
+        @test CoverageTools.sortbybytes(a, b)
+    end
 end # testset
+
+@testset "parser.jl" begin
+    @testset "function_body_lines!" begin
+        @testset "ast.head == :module" begin
+            code = """
+                module Foo
+                eval() = "foo"
+                eval(x) = "bar"
+                f() = "baz"
+                end # module
+                """
+            ast = Meta.parse(code)
+            # remove the top-level line number nodes
+            filter!(x -> !(x isa LineNumberNode), ast.args[end].args)
+            flines = []
+            coverage = CoverageTools.CovCount[]
+            lineoffset = 1
+            infunction = false
+            @test length(flines) == 0
+            CoverageTools.function_body_lines!(flines, ast, coverage, lineoffset, infunction)
+            @test length(flines) == 1
+            @test only(flines) == 4
+        end
+
+    end
+end
 
 end # withenv

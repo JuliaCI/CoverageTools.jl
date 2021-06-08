@@ -1,9 +1,3 @@
-#######################################################################
-# CoverageTools.jl
-# Input: Code coverage and memory allocations
-# Output: Useful things
-# https://github.com/JuliaCI/CoverageTools.jl
-#######################################################################
 module CoverageTools
 
     export process_folder, process_file
@@ -318,7 +312,7 @@ module CoverageTools
         for file in files
             fullfile = joinpath(folder, file)
             if isfile(fullfile) && iscovfile(fullfile, filename)
-                @info "Removing $fullfile"
+                @info("Removing $(fullfile)")
                 rm(fullfile)
             end
         end
@@ -327,4 +321,5 @@ module CoverageTools
     include("lcov.jl")
     include("memalloc.jl")
     include("parser.jl")
-end
+
+end # module
