@@ -1,5 +1,7 @@
-*.jl.cov
-*.jl.*.cov
-*.jl.mem
 *.cov
+*.jl.*.cov
+*.jl.cov
+*.jl.mem
+.DS_Store
+/docs/build/
 Manifest.toml
