@@ -302,7 +302,7 @@ function clean_folder(folder::AbstractString; include_memfiles::Bool=false)
             @info "Removing $fullfile"
             rm(fullfile)
         elseif isdir(fullfile)
-            clean_folder(fullfile; include_memfiles)
+            clean_folder(fullfile; include_memfiles=include_memfiles)
         end
     end
     nothing
