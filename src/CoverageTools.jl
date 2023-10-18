@@ -320,7 +320,7 @@ function clean_file(filename::AbstractString; include_memfiles::Bool=false)
     files = readdir(folder)
     for file in files
         fullfile = joinpath(folder, file)
-        if isfile(fullfile) && ( iscovfile(fullfile) || (include_memfiles && ismemfile(fullfile)) )
+        if isfile(fullfile) && ( iscovfile(fullfile, filename) || (include_memfiles && ismemfile(fullfile, filename)) )
             @info("Removing $(fullfile)")
             rm(fullfile)
         end
