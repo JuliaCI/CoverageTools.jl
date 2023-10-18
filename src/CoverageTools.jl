@@ -271,7 +271,7 @@ end
 ismemfile(filename) = occursin(r"\.jl\.?[0-9]*\.mem$", filename)
 # matches an allocation file for the given sourcefile. They can be full paths
 # with directories, but the directories must match
-function iscovfile(filename, sourcefile)
+function ismemfile(filename, sourcefile)
     startswith(filename, sourcefile) || return false
     ismemfile(filename)
 end
