@@ -267,51 +267,60 @@ function process_folder(folder="src")
     return source_files
 end
 
+# matches julia allocation files with and without the PID
+ismemfile(filename) = occursin(r"\.jl\.?[0-9]*\.mem$", filename)
+# matches an allocation file for the given sourcefile. They can be full paths
+# with directories, but the directories must match
+function ismemfile(filename, sourcefile)
+    startswith(filename, sourcefile) || return false
+    ismemfile(filename)
+end
+
 # matches julia coverage files with and without the PID
 iscovfile(filename) = occursin(r"\.jl\.?[0-9]*\.cov$", filename)
 # matches a coverage file for the given sourcefile. They can be full paths
 # with directories, but the directories must match
 function iscovfile(filename, sourcefile)
     startswith(filename, sourcefile) || return false
-    occursin(r"\.jl\.?[0-9]*\.cov$", filename)
+    iscovfile(filename)
 end
 
 """
-    clean_folder(folder::AbstractString)
+    clean_folder(folder::AbstractString; include_memfiles::Bool=false)
 
-Cleans up all the `.cov` files in the given directory and subdirectories.
+Cleans up all the `.cov` and optionally `.mem` files in the given directory and subdirectories.
 Unlike `process_folder` this does not include a default value
 for the root folder, requiring the calling code to be more explicit about
 which files will be deleted.
 """
-function clean_folder(folder::AbstractString)
+function clean_folder(folder::AbstractString; include_memfiles::Bool=false)
     files = readdir(folder)
     for file in files
         fullfile = joinpath(folder, file)
-        if isfile(fullfile) && iscovfile(file)
-            # we have ourselves a coverage file. eliminate it
+        if isfile(fullfile) && ( iscovfile(file) || (include_memfiles && ismemfile(file)) )
+            # we have ourselves a coverage/memory file. eliminate it
             @info "Removing $fullfile"
             rm(fullfile)
         elseif isdir(fullfile)
-            clean_folder(fullfile)
+            clean_folder(fullfile; include_memfiles=include_memfiles)
         end
     end
     nothing
 end
 
 """
-    clean_file(filename::AbstractString)
+    clean_file(filename::AbstractString; include_memfiles::Bool=false)
 
-Cleans up all `.cov` files associated with a given source file. This only
-looks in the directory of the given file, i.e. the `.cov` files should be
+Cleans up all `.cov` and optionally `.mem` files associated with a given source file. This only
+looks in the directory of the given file, i.e. the `.cov`/`.mem` files should be
 siblings of the source file.
 """
-function clean_file(filename::AbstractString)
+function clean_file(filename::AbstractString; include_memfiles::Bool=false)
     folder = splitdir(filename)[1]
     files = readdir(folder)
     for file in files
         fullfile = joinpath(folder, file)
-        if isfile(fullfile) && iscovfile(fullfile, filename)
+        if isfile(fullfile) && ( iscovfile(fullfile, filename) || (include_memfiles && ismemfile(fullfile, filename)) )
             @info("Removing $(fullfile)")
             rm(fullfile)
         end
