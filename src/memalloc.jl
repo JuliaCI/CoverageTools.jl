@@ -24,7 +24,7 @@ function analyze_malloc_files(files; skip_zeros::Bool = false)
                 if !isempty(tln) && isdigit(tln[1])
                     s = split(tln)
                     b = parse(Int, s[1])
-					skip_zeros && b == 0 && continue
+                    skip_zeros && b == 0 && continue
                     push!(bc, MallocInfo(b, filename, i))
                 end
             end

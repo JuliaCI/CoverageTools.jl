@@ -51,7 +51,7 @@ end # testset
         @test malloc_results == [CoverageTools.MallocInfo(96669, filename, 2)]
         # ... and memory data with zeros skipped
         no_zeros = CoverageTools.analyze_malloc_files([filename]; skip_zeros = true)
-	    @test length(no_zeros) == 1
+        @test length(no_zeros) == 1
 
         lcov = IOBuffer()
         # we only have a single file, but we want to test on the Vector of file results
