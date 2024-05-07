@@ -9,12 +9,13 @@ end
 sortbybytes(a::MallocInfo, b::MallocInfo) = a.bytes < b.bytes
 
 """
-    analyze_malloc_files(files) -> Vector{MallocInfo}
+    analyze_malloc_files(files; skip_zeros::Bool = false) -> Vector{MallocInfo}
 
 Iterates through the given list of filenames and return a `Vector` of
-`MallocInfo`s with allocation information.
+`MallocInfo`s with allocation information. If `skip_zeros` is `true`, then
+allocations of zero bytes are skipped.
 """
-function analyze_malloc_files(files)
+function analyze_malloc_files(files; skip_zeros::Bool = false)
     bc = MallocInfo[]
     for filename in files
         open(filename) do file
@@ -23,6 +24,7 @@ function analyze_malloc_files(files)
                 if !isempty(tln) && isdigit(tln[1])
                     s = split(tln)
                     b = parse(Int, s[1])
+					skip_zeros && b == 0 && continue
                     push!(bc, MallocInfo(b, filename, i))
                 end
             end
