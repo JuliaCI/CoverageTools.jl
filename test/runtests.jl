@@ -49,6 +49,9 @@ end # testset
         malloc_results = analyze_malloc(datadir)
         filename = joinpath(datadir, "testparser.jl.9172.mem")
         @test malloc_results == [CoverageTools.MallocInfo(96669, filename, 2)]
+        # ... and memory data with zeros skipped
+        no_zeros = CoverageTools.analyze_malloc_files([filename]; skip_zeros = true)
+        @test length(no_zeros) == 1
 
         lcov = IOBuffer()
         # we only have a single file, but we want to test on the Vector of file results
@@ -194,6 +197,12 @@ end # testset
         msg = "parsing error in $bustedfile:7: space before \"[\" not allowed in \"i [\""
     elseif VERSION.major == 1 && VERSION.minor == 5
         msg = "parsing error in $bustedfile:7: space before \"[\" not allowed in \"i [\" at none:4"
+    elseif VERSION.major == 1 && VERSION.minor > 9
+        msg = if Sys.iswindows()
+            """parsing error in $bustedfile:8: Base.Meta.ParseError(\"ParseError:\\n# Error @ none:3:10\\n    s = 0\\r\\n    for i [1,2,3]   # this line has a parsing error\\r\\n#        └─┘ ── invalid iteration spec: expected one of `=` `in` or `∈`\", Base.JuliaSyntax.ParseError(Base.JuliaSyntax.SourceFile(\"function parseerr()\\r\\n    s = 0\\r\\n    for i [1,2,3]   # this line has a parsing error\\r\\n        \", 46, \"none\", 1, [1, 22, 33, 86, 94]), Base.JuliaSyntax.Diagnostic[Base.JuliaSyntax.Diagnostic(88, 90, :error, \"invalid iteration spec: expected one of `=` `in` or `∈`\"), Base.JuliaSyntax.Diagnostic(93, 92, :error, \"invalid iteration spec: expected one of `=` `in` or `∈`\"), Base.JuliaSyntax.Diagnostic(95, 94, :error, \"invalid iteration spec: expected one of `=` `in` or `∈`\"), Base.JuliaSyntax.Diagnostic(95, 95, :error, \"unexpected `]`\"), Base.JuliaSyntax.Diagnostic(95, 94, :error, \"Expected `end`\"), Base.JuliaSyntax.Diagnostic(95, 94, :error, \"Expected `end`\"), Base.JuliaSyntax.Diagnostic(95, 95, :error, \"extra tokens after end of expression\")], :none))"""
+        else
+            """parsing error in $bustedfile:8: Base.Meta.ParseError(\"ParseError:\\n# Error @ none:3:10\\n    s = 0\\n    for i [1,2,3]   # this line has a parsing error\\n#        └─┘ ── invalid iteration spec: expected one of `=` `in` or `∈`\", Base.JuliaSyntax.ParseError(Base.JuliaSyntax.SourceFile(\"function parseerr()\\n    s = 0\\n    for i [1,2,3]   # this line has a parsing error\\n        \", 42, \"none\", 1, [1, 21, 31, 83, 91]), Base.JuliaSyntax.Diagnostic[Base.JuliaSyntax.Diagnostic(82, 84, :error, \"invalid iteration spec: expected one of `=` `in` or `∈`\"), Base.JuliaSyntax.Diagnostic(87, 86, :error, \"invalid iteration spec: expected one of `=` `in` or `∈`\"), Base.JuliaSyntax.Diagnostic(89, 88, :error, \"invalid iteration spec: expected one of `=` `in` or `∈`\"), Base.JuliaSyntax.Diagnostic(89, 89, :error, \"unexpected `]`\"), Base.JuliaSyntax.Diagnostic(89, 88, :error, \"Expected `end`\"), Base.JuliaSyntax.Diagnostic(89, 88, :error, \"Expected `end`\"), Base.JuliaSyntax.Diagnostic(89, 89, :error, \"extra tokens after end of expression\")], :none))"""
+        end
     else
         msg = "parsing error in $bustedfile:7: invalid iteration specification"
     end
