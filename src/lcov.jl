@@ -11,8 +11,8 @@ Julia coverage data. It exports the `writefile` function.
 """
 module LCOV
 
-using CoverageTools
-using CoverageTools: CovCount
+using ..CoverageTools
+using ..CoverageTools: CovCount
 
 export writefile, readfile
 
