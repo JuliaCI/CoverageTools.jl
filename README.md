@@ -7,3 +7,4 @@ CoverageTools.jl - you probably want [Coverage.jl](https://github.com/JuliaCI/Co
 CoverageTools.jl provides the core functionality for processing code coverage and memory allocation results.
 
 Most users will want to use [Coverage.jl](https://github.com/JuliaCI/Coverage.jl) instead. [Coverage.jl](https://github.com/JuliaCI/Coverage.jl) allows you to upload your coverage reports to online services such as Codecov.io and Coveralls.io.
+
