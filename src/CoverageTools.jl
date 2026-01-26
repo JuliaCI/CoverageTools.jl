@@ -168,6 +168,9 @@ Detect the appropriate Julia syntax version for parsing a source file by looking
 for the nearest project file (Project.toml or JuliaProject.toml) and reading its
 syntax version configuration, or by looking for the VERSION file in Julia's own
 source tree (for base/ files).
+
+Defaults to v"1.14" if no specific version is found, as JuliaSyntax generally
+maintains backwards compatibility with older syntax.
 """
 function detect_syntax_version(filename::AbstractString)
     dir = dirname(abspath(filename))
@@ -178,16 +181,15 @@ function detect_syntax_version(filename::AbstractString)
         project_file = Base.locate_project_file(dir)
 
         if project_file !== nothing && project_file !== true && isfile(project_file)
-            # Use Base.project_file_load_spec if available
-            # This properly handles syntax.julia_version and compat.julia entries
+            # Use Base.project_file_load_spec if available (Julia 1.14+)
+            # This properly handles syntax.julia_version entries
             if isdefined(Base, :project_file_load_spec)
                 spec = Base.project_file_load_spec(project_file, "")
                 return spec.julia_syntax_version
             else
-                # Fallback for older Julia versions
+                # Fallback for older Julia versions - only check syntax.julia_version
                 project = TOML.tryparsefile(project_file)
                 if !(project isa Base.TOML.ParserError)
-                    # Check for syntax.julia_version entry first
                     syntax_table = get(project, "syntax", nothing)
                     if syntax_table !== nothing
                         jv = get(syntax_table, "julia_version", nothing)
@@ -199,23 +201,6 @@ function detect_syntax_version(filename::AbstractString)
                             end
                         end
                     end
-                    # Check for julia compat entry
-                    if haskey(project, "compat") && haskey(project["compat"], "julia")
-                        compat_str = project["compat"]["julia"]
-                        # Parse the compat string - extract the first version number
-                        m = match(r"(\d+)\.(\d+)", compat_str)
-                        if m !== nothing
-                            try
-                                major = parse(Int, m.captures[1])
-                                minor = parse(Int, m.captures[2])
-                                return VersionNumber(major, minor)
-                            catch e
-                                e isa ArgumentError || rethrow()
-                            end
-                        end
-                    end
-                    # If no explicit syntax version, fall back to VERSION
-                    return VERSION
                 end
             end
         end
@@ -252,8 +237,9 @@ function detect_syntax_version(filename::AbstractString)
         end
         dir = parent
     end
-    # Default to the current running Julia version if we can't determine it
-    return VERSION
+    # Default to v"1.14" - JuliaSyntax maintains backwards compatibility
+    # so using a recent version generally works for older code
+    return v"1.14"
 end
 
 """
