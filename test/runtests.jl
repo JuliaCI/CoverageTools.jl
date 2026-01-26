@@ -204,11 +204,11 @@ end # testset
         msg = "parsing error in $bustedfile:7: invalid iteration specification"
     end
     @test_throws Base.Meta.ParseError(msg) process_file(bustedfile, srcdir)
-    
+
     # Test error at beginning of file
     error_start = joinpath(srcdir, "error_start.jl")
     @test_throws Base.Meta.ParseError process_file(error_start, srcdir)
-    
+
     # Test error in middle of file - should report correct line
     error_middle = joinpath(srcdir, "error_middle.jl")
     err = try
@@ -219,7 +219,7 @@ end # testset
     end
     @test err isa Base.Meta.ParseError
     @test occursin(":7", err.msg)  # Error on line 7
-    
+
     clean_folder(srcdir)
 end # testset
 
@@ -231,7 +231,7 @@ end # testset
         version = CoverageTools.detect_syntax_version(testfile)
         @test version == v"1.14"
     end
-    
+
     # Test explicit syntax.julia_version in Project.toml
     if isdefined(Base, :project_file_load_spec)
         mktempdir() do dir
@@ -244,7 +244,10 @@ end # testset
             testfile = joinpath(dir, "test.jl")
             write(testfile, "x = 1")
             version = CoverageTools.detect_syntax_version(testfile)
-            @test version == v"1.11"
+            # Julia 1.14+ clamps syntax versions to minimum v"1.13" (NON_VERSIONED_SYNTAX)
+            # since syntax versioning was first introduced in 1.14. We specified 1.11,
+            # so it should read from Project.toml and clamp to 1.13 (not default to 1.14)
+            @test version == v"1.13"
         end
     end
 end # testset
