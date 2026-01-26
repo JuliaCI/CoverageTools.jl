@@ -140,6 +140,101 @@ function process_cov(filename, folder)
 end
 
 """
+    detect_syntax_version(filename::AbstractString) -> VersionNumber
+
+Detect the appropriate Julia syntax version for parsing a source file by looking
+for the nearest project file (Project.toml or JuliaProject.toml) and reading its
+syntax version configuration, or by looking for the VERSION file in Julia's own
+source tree (for base/ files).
+"""
+function detect_syntax_version(filename::AbstractString)
+    dir = dirname(abspath(filename))
+    # Walk up the directory tree looking for project file or VERSION file
+    while true
+        # Check for project file first (for packages and stdlib)
+        # Use Base.locate_project_file to handle both Project.toml and JuliaProject.toml
+        project_file = Base.locate_project_file(dir)
+
+        if project_file !== nothing && project_file !== true && isfile(project_file)
+            # Use Base.project_file_load_spec if available
+            # This properly handles syntax.julia_version and compat.julia entries
+            if isdefined(Base, :project_file_load_spec)
+                spec = Base.project_file_load_spec(project_file, "")
+                return spec.julia_syntax_version
+            else
+                # Fallback for older Julia versions
+                project = Base.TOML.tryparsefile(project_file)
+                if !(project isa Base.TOML.ParserError)
+                    # Check for syntax.julia_version entry first
+                    syntax_table = get(project, "syntax", nothing)
+                    if syntax_table !== nothing
+                        jv = get(syntax_table, "julia_version", nothing)
+                        if jv !== nothing
+                            try
+                                return VersionNumber(jv)
+                            catch e
+                                e isa ArgumentError || rethrow()
+                            end
+                        end
+                    end
+                    # Check for julia compat entry
+                    if haskey(project, "compat") && haskey(project["compat"], "julia")
+                        compat_str = project["compat"]["julia"]
+                        # Parse the compat string - extract the first version number
+                        m = match(r"(\d+)\.(\d+)", compat_str)
+                        if m !== nothing
+                            try
+                                major = parse(Int, m.captures[1])
+                                minor = parse(Int, m.captures[2])
+                                return VersionNumber(major, minor)
+                            catch e
+                                e isa ArgumentError || rethrow()
+                            end
+                        end
+                    end
+                    # If no explicit syntax version, fall back to VERSION
+                    return VERSION
+                end
+            end
+        end
+
+        # Check for VERSION file (for Julia's own base/ source without project file)
+        version_file = joinpath(dir, "VERSION")
+        if isfile(version_file)
+            try
+                version_str = strip(read(version_file, String))
+            catch e
+                e isa SystemError || rethrow()
+                # If we can't read VERSION, continue searching
+                version_str = nothing
+            end
+            if version_str !== nothing
+                # Parse version string like "1.14.0-DEV"
+                m = match(r"^(\d+)\.(\d+)", version_str)
+                if m !== nothing
+                    try
+                        major = parse(Int, m.captures[1])
+                        minor = parse(Int, m.captures[2])
+                        return VersionNumber(major, minor)
+                    catch e
+                        e isa ArgumentError || rethrow()
+                        # If we can't parse VERSION, continue searching
+                    end
+                end
+            end
+        end
+
+        parent = dirname(dir)
+        if parent == dir  # reached root
+            break
+        end
+        dir = parent
+    end
+    # Default to the current running Julia version if we can't determine it
+    return VERSION
+end
+
+"""
     amend_coverage_from_src!(coverage::Vector{CovCount}, srcname)
     amend_coverage_from_src!(fc::FileCoverage)
 
@@ -168,6 +263,13 @@ function amend_coverage_from_src!(fc::FileCoverage)
         push!(linepos, position(io))
     end
     pos = 1
+    # Detect the appropriate syntax version for this package
+    syntax_version = detect_syntax_version(fc.filename)
+    # When parsing, use the detected syntax version to ensure we can parse
+    # all syntax features available in that version, even when running under
+    # a different Julia version (e.g., parsing Julia 1.14 code with Julia 1.11).
+    # The version keyword was added in Julia 1.14
+    parse_kws = VERSION >= v"1.14" ? (version=syntax_version,) : NamedTuple()
     while pos <= length(content)
         # We now want to convert the one-based offset pos into a line
         # number, by looking it up in linepos. But linepos[i] contains the
@@ -179,7 +281,7 @@ function amend_coverage_from_src!(fc::FileCoverage)
         lineoffset = searchsortedlast(linepos, pos - 1) - 1
 
         # now we can parse the next chunk of the input
-        ast, pos = Meta.parse(content, pos; raise=false)
+        ast, pos = Meta.parse(content, pos; raise=false, parse_kws...)
         isa(ast, Expr) || continue
         if ast.head ∈ (:error, :incomplete)
             line = searchsortedlast(linepos, pos - 1)
