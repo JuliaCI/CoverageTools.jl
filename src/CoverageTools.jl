@@ -1,5 +1,7 @@
 module CoverageTools
 
+using JuliaSyntax
+
 export process_folder, process_file
 export clean_folder, clean_file
 export process_cov, amend_coverage_from_src!
@@ -268,8 +270,7 @@ function amend_coverage_from_src!(fc::FileCoverage)
     # When parsing, use the detected syntax version to ensure we can parse
     # all syntax features available in that version, even when running under
     # a different Julia version (e.g., parsing Julia 1.14 code with Julia 1.11).
-    # The version keyword was added in Julia 1.14
-    parse_kws = VERSION >= v"1.14" ? (version=syntax_version,) : NamedTuple()
+    # JuliaSyntax provides version-aware parsing for any Julia version.
     while pos <= length(content)
         # We now want to convert the one-based offset pos into a line
         # number, by looking it up in linepos. But linepos[i] contains the
@@ -281,7 +282,18 @@ function amend_coverage_from_src!(fc::FileCoverage)
         lineoffset = searchsortedlast(linepos, pos - 1) - 1
 
         # now we can parse the next chunk of the input
-        ast, pos = Meta.parse(content, pos; raise=false, parse_kws...)
+        try
+            ast, pos = JuliaSyntax.parsestmt(Expr, content, pos;
+                                              version=syntax_version,
+                                              ignore_errors=true,
+                                              ignore_warnings=true)
+        catch e
+            if isa(e, JuliaSyntax.ParseError)
+                line = searchsortedlast(linepos, pos - 1)
+                throw(Base.Meta.ParseError("parsing error in $(fc.filename):$line"))
+            end
+            rethrow()
+        end
         isa(ast, Expr) || continue
         if ast.head ∈ (:error, :incomplete)
             line = searchsortedlast(linepos, pos - 1)
