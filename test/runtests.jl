@@ -204,6 +204,49 @@ end # testset
         msg = "parsing error in $bustedfile:7: invalid iteration specification"
     end
     @test_throws Base.Meta.ParseError(msg) process_file(bustedfile, srcdir)
+    
+    # Test error at beginning of file
+    error_start = joinpath(srcdir, "error_start.jl")
+    @test_throws Base.Meta.ParseError process_file(error_start, srcdir)
+    
+    # Test error in middle of file - should report correct line
+    error_middle = joinpath(srcdir, "error_middle.jl")
+    err = try
+        process_file(error_middle, srcdir)
+        nothing
+    catch e
+        e
+    end
+    @test err isa Base.Meta.ParseError
+    @test occursin(":7", err.msg)  # Error on line 7
+    
+    clean_folder(srcdir)
+end # testset
+
+@testset "Syntax version detection" begin
+    # Test default version
+    mktempdir() do dir
+        testfile = joinpath(dir, "test.jl")
+        write(testfile, "x = 1")
+        version = CoverageTools.detect_syntax_version(testfile)
+        @test version == v"1.14"
+    end
+    
+    # Test explicit syntax.julia_version in Project.toml
+    if isdefined(Base, :project_file_load_spec)
+        mktempdir() do dir
+            project = joinpath(dir, "Project.toml")
+            write(project, """
+                name = "TestPkg"
+                [syntax]
+                julia_version = "1.11"
+                """)
+            testfile = joinpath(dir, "test.jl")
+            write(testfile, "x = 1")
+            version = CoverageTools.detect_syntax_version(testfile)
+            @test version == v"1.11"
+        end
+    end
 end # testset
 
 @testset "malloc.jl" begin
