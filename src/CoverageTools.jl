@@ -22,7 +22,7 @@ Recursively check if an expression contains any `:error` nodes.
 """
 function has_embedded_errors(expr)
     if expr isa Expr
-        if expr.head === :error && !isempty(expr.args)
+        if expr.head === :error
             return true
         end
         for arg in expr.args
@@ -38,7 +38,7 @@ end
     find_error_line(expr)
 
 Find the line number of the first error in an expression by locating
-the LineNumberNode that precedes the first :error node.
+the LineNumberNode or Expr(:line) that precedes the first :error node.
 Returns nothing if no error is found.
 """
 function find_error_line(expr, last_line=nothing)
@@ -47,6 +47,14 @@ function find_error_line(expr, last_line=nothing)
     end
 
     if expr isa Expr
+        # Handle Expr(:line, ...) nodes emitted by JuliaSyntax
+        if expr.head === :line && length(expr.args) >= 1
+            line_num = expr.args[1]
+            if line_num isa Integer
+                return Int(line_num), false
+            end
+        end
+        
         if expr.head === :error
             # Found an error, return the last seen line number
             return last_line, true
@@ -347,8 +355,8 @@ function amend_coverage_from_src!(fc::FileCoverage)
         # But we need to distinguish real errors from benign cases
         if ast.head === :error
             errmsg = isempty(ast.args) ? "" : string(ast.args[1])
-            # Empty error or "premature end of input" means EOF with no more statements
-            if isempty(errmsg) || occursin("premature end of input", errmsg)
+            # Only treat as EOF if we're actually at end of content AND it's an empty error or premature EOF
+            if pos >= length(content) && (isempty(errmsg) || occursin("premature end of input", errmsg))
                 break  # Done parsing, no more content
             end
             # Real parse error - throw it
