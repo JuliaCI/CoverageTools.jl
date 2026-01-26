@@ -1,6 +1,7 @@
 module CoverageTools
 
-using JuliaSyntax
+import JuliaSyntax
+import TOML
 
 export process_folder, process_file
 export clean_folder, clean_file
@@ -13,6 +14,25 @@ export FileCoverage
 # the nothing means it doesn't make sense to have a count for this
 # line (e.g. a comment), but 0 means it could have run but didn't.
 const CovCount = Union{Nothing,Int}
+
+"""
+    has_embedded_errors(expr)
+
+Recursively check if an expression contains any `:error` nodes.
+"""
+function has_embedded_errors(expr)
+    if expr isa Expr
+        if expr.head === :error && !isempty(expr.args)
+            return true
+        end
+        for arg in expr.args
+            if has_embedded_errors(arg)
+                return true
+            end
+        end
+    end
+    return false
+end
 
 """
 FileCoverage
@@ -165,7 +185,7 @@ function detect_syntax_version(filename::AbstractString)
                 return spec.julia_syntax_version
             else
                 # Fallback for older Julia versions
-                project = Base.TOML.tryparsefile(project_file)
+                project = TOML.tryparsefile(project_file)
                 if !(project isa Base.TOML.ParserError)
                     # Check for syntax.julia_version entry first
                     syntax_table = get(project, "syntax", nothing)
@@ -282,22 +302,47 @@ function amend_coverage_from_src!(fc::FileCoverage)
         lineoffset = searchsortedlast(linepos, pos - 1) - 1
 
         # now we can parse the next chunk of the input
+        local ast, newpos
         try
-            ast, pos = JuliaSyntax.parsestmt(Expr, content, pos;
-                                              version=syntax_version,
-                                              ignore_errors=true,
-                                              ignore_warnings=true)
+            ast, newpos = JuliaSyntax.parsestmt(Expr, content, pos; 
+                                                version=syntax_version,
+                                                ignore_errors=true,
+                                                ignore_warnings=true)
         catch e
             if isa(e, JuliaSyntax.ParseError)
                 line = searchsortedlast(linepos, pos - 1)
-                throw(Base.Meta.ParseError("parsing error in $(fc.filename):$line"))
+                throw(Base.Meta.ParseError("parsing error in $(fc.filename):$line: $e", e))
             end
             rethrow()
         end
+        
+        # If position didn't advance, we're stuck - break out to avoid infinite loop
+        if newpos <= pos
+            break
+        end
+        pos = newpos
+        
         isa(ast, Expr) || continue
-        if ast.head ∈ (:error, :incomplete)
+        # For files with only actual parse errors (not end-of-file), we should throw
+        # But we need to distinguish real errors from benign cases
+        if ast.head === :error
+            errmsg = isempty(ast.args) ? "" : string(ast.args[1])
+            # Empty error or "premature end of input" means EOF with no more statements
+            if isempty(errmsg) || occursin("premature end of input", errmsg)
+                break  # Done parsing, no more content
+            end
+            # Real parse error - throw it
             line = searchsortedlast(linepos, pos - 1)
-            throw(Base.Meta.ParseError("parsing error in $(fc.filename):$line: $(ast.args[1])"))
+            throw(Base.Meta.ParseError("parsing error in $(fc.filename):$line: $errmsg", nothing))
+        end
+        # Check if the AST contains any embedded :error nodes (from ignore_errors=true)
+        if has_embedded_errors(ast)
+            line = searchsortedlast(linepos, pos - 1)
+            throw(Base.Meta.ParseError("parsing error in $(fc.filename):$line", nothing))
+        end
+        # Skip incomplete expressions
+        if ast.head === :incomplete
+            continue
         end
         flines = function_body_lines(ast, coverage, lineoffset)
         if !isempty(flines)
