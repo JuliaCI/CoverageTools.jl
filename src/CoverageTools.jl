@@ -249,12 +249,12 @@ function detect_syntax_version(filename::AbstractString)
         # Check for VERSION file (for Julia's own base/ source without project file)
         version_file = joinpath(dir, "VERSION")
         if isfile(version_file)
+            version_str = nothing
             try
                 version_str = strip(read(version_file, String))
             catch e
                 e isa SystemError || rethrow()
                 # If we can't read VERSION, continue searching
-                version_str = nothing
             end
             if version_str !== nothing
                 # Parse version string like "1.14.0-DEV"
