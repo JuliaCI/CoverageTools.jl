@@ -35,6 +35,39 @@ function has_embedded_errors(expr)
 end
 
 """
+    find_error_line(expr)
+
+Find the line number of the first error in an expression by locating
+the LineNumberNode that precedes the first :error node.
+Returns nothing if no error is found.
+"""
+function find_error_line(expr, last_line=nothing)
+    if expr isa LineNumberNode
+        return expr.line, false
+    end
+
+    if expr isa Expr
+        if expr.head === :error
+            # Found an error, return the last seen line number
+            return last_line, true
+        end
+
+        current_line = last_line
+        for arg in expr.args
+            line_result, found_error = find_error_line(arg, current_line)
+            if found_error
+                return line_result, true
+            end
+            if line_result !== nothing && !found_error
+                current_line = line_result
+            end
+        end
+    end
+
+    return nothing, false
+end
+
+"""
 FileCoverage
 
 Represents coverage info about a file, including the filename, the source
@@ -286,28 +319,29 @@ function amend_coverage_from_src!(fc::FileCoverage)
         # that later on to shift other one-based line numbers, we must
         # subtract 1 from the offset to make it zero-based.
         lineoffset = searchsortedlast(linepos, pos - 1) - 1
+        # Compute actual 1-based line number for error reporting
+        current_line = searchsortedlast(linepos, pos - 1)
 
         # now we can parse the next chunk of the input
         local ast, newpos
         try
-            ast, newpos = JuliaSyntax.parsestmt(Expr, content, pos; 
+            ast, newpos = JuliaSyntax.parsestmt(Expr, content, pos;
                                                 version=syntax_version,
                                                 ignore_errors=true,
                                                 ignore_warnings=true)
         catch e
             if isa(e, JuliaSyntax.ParseError)
-                line = searchsortedlast(linepos, pos - 1)
-                throw(Base.Meta.ParseError("parsing error in $(fc.filename):$line: $e", e))
+                throw(Base.Meta.ParseError("parsing error in $(fc.filename):$current_line: $e", e))
             end
             rethrow()
         end
-        
-        # If position didn't advance, we're stuck - break out to avoid infinite loop
+
+        # If position didn't advance, we have a malformed token/byte - throw error
         if newpos <= pos
-            break
+            throw(Base.Meta.ParseError("parsing error in $(fc.filename):$current_line: parser did not advance", nothing))
         end
         pos = newpos
-        
+
         isa(ast, Expr) || continue
         # For files with only actual parse errors (not end-of-file), we should throw
         # But we need to distinguish real errors from benign cases
@@ -318,17 +352,25 @@ function amend_coverage_from_src!(fc::FileCoverage)
                 break  # Done parsing, no more content
             end
             # Real parse error - throw it
-            line = searchsortedlast(linepos, pos - 1)
-            throw(Base.Meta.ParseError("parsing error in $(fc.filename):$line: $errmsg", nothing))
+            throw(Base.Meta.ParseError("parsing error in $(fc.filename):$current_line: $errmsg", nothing))
         end
         # Check if the AST contains any embedded :error nodes (from ignore_errors=true)
         if has_embedded_errors(ast)
-            line = searchsortedlast(linepos, pos - 1)
-            throw(Base.Meta.ParseError("parsing error in $(fc.filename):$line", nothing))
+            # Try to find the actual line where the error occurred
+            error_internal_line, found = find_error_line(ast)
+            if found && error_internal_line !== nothing
+                # error_internal_line is relative to the parsed content (1-based)
+                # We need to add lineoffset to get the actual file line
+                error_line = lineoffset + error_internal_line
+                throw(Base.Meta.ParseError("parsing error in $(fc.filename):$error_line", nothing))
+            else
+                # Fallback to the line where we started parsing this statement
+                throw(Base.Meta.ParseError("parsing error in $(fc.filename):$current_line", nothing))
+            end
         end
-        # Skip incomplete expressions
+        # Incomplete expressions indicate truncated/malformed code - treat as parse error
         if ast.head === :incomplete
-            continue
+            throw(Base.Meta.ParseError("parsing error in $(fc.filename):$current_line: incomplete expression", nothing))
         end
         flines = function_body_lines(ast, coverage, lineoffset)
         if !isempty(flines)
