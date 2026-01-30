@@ -351,6 +351,9 @@ function amend_coverage_from_src!(fc::FileCoverage)
         pos = newpos
 
         isa(ast, Expr) || continue
+        # Compute line number based on parse position (compatible with Meta.parse behavior)
+        error_line_from_pos = searchsortedlast(linepos, pos - 1)
+
         # For files with only actual parse errors (not end-of-file), we should throw
         # But we need to distinguish real errors from benign cases
         if ast.head === :error
@@ -362,7 +365,9 @@ function amend_coverage_from_src!(fc::FileCoverage)
             # Real parse error - throw it
             throw(Base.Meta.ParseError("parsing error in $(fc.filename):$current_line: $errmsg", nothing))
         end
-        # Check if the AST contains any embedded :error nodes (from ignore_errors=true)
+        # Check if the AST contains any embedded :error nodes (from ignore_errors=true).
+        # When we can't locate an explicit line node, fall back to the parse position
+        # to preserve Meta.parse-style error line reporting across statements.
         if has_embedded_errors(ast)
             # Try to find the actual line where the error occurred
             error_internal_line, found = find_error_line(ast)
@@ -373,7 +378,7 @@ function amend_coverage_from_src!(fc::FileCoverage)
                 throw(Base.Meta.ParseError("parsing error in $(fc.filename):$error_line", nothing))
             else
                 # Fallback to the line where we started parsing this statement
-                throw(Base.Meta.ParseError("parsing error in $(fc.filename):$current_line", nothing))
+                throw(Base.Meta.ParseError("parsing error in $(fc.filename):$error_line_from_pos", nothing))
             end
         end
         # Incomplete expressions indicate truncated/malformed code - treat as parse error

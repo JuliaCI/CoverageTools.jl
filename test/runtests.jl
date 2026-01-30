@@ -265,6 +265,21 @@ end # testset
     @test err isa Base.Meta.ParseError
     @test occursin(":7", err.msg)  # Error on line 7
 
+    # Test error after first statement - should report correct line
+    error_after_first = joinpath(srcdir, "error_after_first.jl")
+    err_after = try
+        process_file(error_after_first, srcdir)
+        nothing
+    catch e
+        e
+    end
+    @test err_after isa Base.Meta.ParseError
+    @test occursin(":4", err_after.msg)  # Error on line 4
+
+    # Test unexpected EOF should raise a parse error (not be silently ignored)
+    error_eof = joinpath(srcdir, "error_eof.jl")
+    @test_throws Base.Meta.ParseError process_file(error_eof, srcdir)
+
     clean_folder(srcdir)
 end # testset
 
