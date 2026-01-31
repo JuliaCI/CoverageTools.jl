@@ -21,17 +21,9 @@ const CovCount = Union{Nothing,Int}
 Recursively check if an expression contains any `:error` nodes.
 """
 function has_embedded_errors(expr)
-    if expr isa Expr
-        if expr.head === :error
-            return true
-        end
-        for arg in expr.args
-            if has_embedded_errors(arg)
-                return true
-            end
-        end
-    end
-    return false
+    expr isa Expr || return false
+    expr.head === :error && return true
+    return any(has_embedded_errors, expr.args)
 end
 
 """
@@ -327,8 +319,8 @@ function amend_coverage_from_src!(fc::FileCoverage)
         # that later on to shift other one-based line numbers, we must
         # subtract 1 from the offset to make it zero-based.
         lineoffset = searchsortedlast(linepos, pos - 1) - 1
-        # Compute actual 1-based line number for error reporting
-        current_line = searchsortedlast(linepos, pos - 1)
+        # 1-based line number for error reporting (lineoffset is 0-based)
+        current_line = lineoffset + 1
 
         # now we can parse the next chunk of the input
         local ast, newpos

@@ -294,6 +294,7 @@ end # testset
 
     # Test explicit syntax.julia_version in Project.toml
     if isdefined(Base, :project_file_load_spec)
+        # Julia 1.14+ uses Base.project_file_load_spec
         mktempdir() do dir
             project = joinpath(dir, "Project.toml")
             write(project, """
@@ -308,6 +309,20 @@ end # testset
             # since syntax versioning was first introduced in 1.14. We specified 1.11,
             # so it should read from Project.toml and clamp to 1.13 (not default to 1.14)
             @test version == v"1.13"
+        end
+    else
+        # Test TOML fallback path for Julia < 1.14
+        mktempdir() do dir
+            project = joinpath(dir, "Project.toml")
+            write(project, """
+                name = "TestPkg"
+                [syntax]
+                julia_version = "1.12"
+                """)
+            testfile = joinpath(dir, "test.jl")
+            write(testfile, "x = 1")
+            version = CoverageTools.detect_syntax_version(testfile)
+            @test version == v"1.12"
         end
     end
     
