@@ -6,6 +6,51 @@ if Base.VERSION < v"1.1"
     isnothing(x::Nothing) = true
 end
 
+# Test internal functions for better coverage
+@testset "find_error_line with Expr(:line)" begin
+    # Test handling of Expr(:line) nodes
+    ast = Expr(:block,
+        Expr(:line, 5),
+        :(x = 1),
+        Expr(:line, 10),
+        Expr(:error)
+    )
+    line, found = CoverageTools.find_error_line(ast)
+    @test found
+    @test line == 10
+    
+    # Test with LineNumberNode
+    ast2 = Expr(:block,
+        LineNumberNode(7),
+        :(y = 2),
+        LineNumberNode(12),
+        Expr(:error)
+    )
+    line2, found2 = CoverageTools.find_error_line(ast2)
+    @test found2
+    @test line2 == 12
+    
+    # Test with no error
+    ast3 = Expr(:block, :(z = 3))
+    line3, found3 = CoverageTools.find_error_line(ast3)
+    @test !found3
+    @test line3 === nothing
+end
+
+@testset "has_embedded_errors with empty error" begin
+    # Test that empty :error nodes are detected
+    ast_empty_error = Expr(:block, Expr(:error))
+    @test CoverageTools.has_embedded_errors(ast_empty_error)
+    
+    # Test nested empty error
+    ast_nested = Expr(:block, :(x = 1), Expr(:function, :(f()), Expr(:error)))
+    @test CoverageTools.has_embedded_errors(ast_nested)
+    
+    # Test no error
+    ast_no_error = Expr(:block, :(x = 1), :(y = 2))
+    @test !CoverageTools.has_embedded_errors(ast_no_error)
+end
+
 withenv("DISABLE_AMEND_COVERAGE_FROM_SRC" => nothing) do
 
 @testset "iscovfile" begin
@@ -198,15 +243,106 @@ end # testset
     elseif VERSION.major == 1 && VERSION.minor == 5
         msg = "parsing error in $bustedfile:7: space before \"[\" not allowed in \"i [\" at none:4"
     elseif VERSION.major == 1 && VERSION.minor > 9
-        msg = if Sys.iswindows()
-            """parsing error in $bustedfile:8: Base.Meta.ParseError(\"ParseError:\\n# Error @ none:3:10\\n    s = 0\\r\\n    for i [1,2,3]   # this line has a parsing error\\r\\n#        └─┘ ── invalid iteration spec: expected one of `=` `in` or `∈`\", Base.JuliaSyntax.ParseError(Base.JuliaSyntax.SourceFile(\"function parseerr()\\r\\n    s = 0\\r\\n    for i [1,2,3]   # this line has a parsing error\\r\\n        \", 46, \"none\", 1, [1, 22, 33, 86, 94]), Base.JuliaSyntax.Diagnostic[Base.JuliaSyntax.Diagnostic(88, 90, :error, \"invalid iteration spec: expected one of `=` `in` or `∈`\"), Base.JuliaSyntax.Diagnostic(93, 92, :error, \"invalid iteration spec: expected one of `=` `in` or `∈`\"), Base.JuliaSyntax.Diagnostic(95, 94, :error, \"invalid iteration spec: expected one of `=` `in` or `∈`\"), Base.JuliaSyntax.Diagnostic(95, 95, :error, \"unexpected `]`\"), Base.JuliaSyntax.Diagnostic(95, 94, :error, \"Expected `end`\"), Base.JuliaSyntax.Diagnostic(95, 94, :error, \"Expected `end`\"), Base.JuliaSyntax.Diagnostic(95, 95, :error, \"extra tokens after end of expression\")], :none))"""
-        else
-            """parsing error in $bustedfile:8: Base.Meta.ParseError(\"ParseError:\\n# Error @ none:3:10\\n    s = 0\\n    for i [1,2,3]   # this line has a parsing error\\n#        └─┘ ── invalid iteration spec: expected one of `=` `in` or `∈`\", Base.JuliaSyntax.ParseError(Base.JuliaSyntax.SourceFile(\"function parseerr()\\n    s = 0\\n    for i [1,2,3]   # this line has a parsing error\\n        \", 42, \"none\", 1, [1, 21, 31, 83, 91]), Base.JuliaSyntax.Diagnostic[Base.JuliaSyntax.Diagnostic(82, 84, :error, \"invalid iteration spec: expected one of `=` `in` or `∈`\"), Base.JuliaSyntax.Diagnostic(87, 86, :error, \"invalid iteration spec: expected one of `=` `in` or `∈`\"), Base.JuliaSyntax.Diagnostic(89, 88, :error, \"invalid iteration spec: expected one of `=` `in` or `∈`\"), Base.JuliaSyntax.Diagnostic(89, 89, :error, \"unexpected `]`\"), Base.JuliaSyntax.Diagnostic(89, 88, :error, \"Expected `end`\"), Base.JuliaSyntax.Diagnostic(89, 88, :error, \"Expected `end`\"), Base.JuliaSyntax.Diagnostic(89, 89, :error, \"extra tokens after end of expression\")], :none))"""
-        end
+        # With JuliaSyntax, the error is detected on the line where the statement starts
+        msg = "parsing error in $bustedfile:7"
     else
         msg = "parsing error in $bustedfile:7: invalid iteration specification"
     end
     @test_throws Base.Meta.ParseError(msg) process_file(bustedfile, srcdir)
+
+    # Test error at beginning of file
+    error_start = joinpath(srcdir, "error_start.jl")
+    @test_throws Base.Meta.ParseError process_file(error_start, srcdir)
+
+    # Test error in middle of file - should report correct line
+    error_middle = joinpath(srcdir, "error_middle.jl")
+    err = try
+        process_file(error_middle, srcdir)
+        nothing
+    catch e
+        e
+    end
+    @test err isa Base.Meta.ParseError
+    @test occursin(":7", err.msg)  # Error on line 7
+
+    # Test error after first statement - should report correct line
+    error_after_first = joinpath(srcdir, "error_after_first.jl")
+    err_after = try
+        process_file(error_after_first, srcdir)
+        nothing
+    catch e
+        e
+    end
+    @test err_after isa Base.Meta.ParseError
+    @test occursin(":4", err_after.msg)  # Error on line 4
+
+    # Test unexpected EOF should raise a parse error (not be silently ignored)
+    error_eof = joinpath(srcdir, "error_eof.jl")
+    @test_throws Base.Meta.ParseError process_file(error_eof, srcdir)
+
+    clean_folder(srcdir)
+end # testset
+
+@testset "Syntax version detection" begin
+    # Test default version
+    mktempdir() do dir
+        testfile = joinpath(dir, "test.jl")
+        write(testfile, "x = 1")
+        version = CoverageTools.detect_syntax_version(testfile)
+        @test version == v"1.14"
+    end
+
+    # Test explicit syntax.julia_version in Project.toml
+    if isdefined(Base, :project_file_load_spec)
+        # Julia 1.14+ uses Base.project_file_load_spec
+        mktempdir() do dir
+            project = joinpath(dir, "Project.toml")
+            write(project, """
+                name = "TestPkg"
+                [syntax]
+                julia_version = "1.11"
+                """)
+            testfile = joinpath(dir, "test.jl")
+            write(testfile, "x = 1")
+            version = CoverageTools.detect_syntax_version(testfile)
+            # Julia 1.14+ clamps syntax versions to minimum v"1.13" (NON_VERSIONED_SYNTAX)
+            # since syntax versioning was first introduced in 1.14. We specified 1.11,
+            # so it should read from Project.toml and clamp to 1.13 (not default to 1.14)
+            @test version == v"1.13"
+        end
+    else
+        # Test TOML fallback path for Julia < 1.14
+        mktempdir() do dir
+            project = joinpath(dir, "Project.toml")
+            write(project, """
+                name = "TestPkg"
+                [syntax]
+                julia_version = "1.12"
+                """)
+            testfile = joinpath(dir, "test.jl")
+            write(testfile, "x = 1")
+            version = CoverageTools.detect_syntax_version(testfile)
+            @test version == v"1.12"
+        end
+    end
+    
+    # Test VERSION file parsing (for Julia's own base/)
+    mktempdir() do dir
+        write(joinpath(dir, "VERSION"), "1.12.0-DEV")
+        testfile = joinpath(dir, "test.jl")
+        write(testfile, "x = 1")
+        version = CoverageTools.detect_syntax_version(testfile)
+        @test version == v"1.12"
+    end
+    
+    # Test fallback when VERSION file can't be parsed
+    mktempdir() do dir
+        write(joinpath(dir, "VERSION"), "invalid")
+        testfile = joinpath(dir, "test.jl")
+        write(testfile, "x = 1")
+        version = CoverageTools.detect_syntax_version(testfile)
+        @test version == v"1.14"  # Falls back to default
+    end
 end # testset
 
 @testset "malloc.jl" begin

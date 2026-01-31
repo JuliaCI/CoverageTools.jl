@@ -1,5 +1,8 @@
 module CoverageTools
 
+import JuliaSyntax
+import TOML
+
 export process_folder, process_file
 export clean_folder, clean_file
 export process_cov, amend_coverage_from_src!
@@ -11,6 +14,58 @@ export FileCoverage
 # the nothing means it doesn't make sense to have a count for this
 # line (e.g. a comment), but 0 means it could have run but didn't.
 const CovCount = Union{Nothing,Int}
+
+"""
+    has_embedded_errors(expr)
+
+Recursively check if an expression contains any `:error` nodes.
+"""
+function has_embedded_errors(expr)
+    expr isa Expr || return false
+    expr.head === :error && return true
+    return any(has_embedded_errors, expr.args)
+end
+
+"""
+    find_error_line(expr)
+
+Find the line number of the first error in an expression by locating
+the LineNumberNode or Expr(:line) that precedes the first :error node.
+Returns nothing if no error is found.
+"""
+function find_error_line(expr, last_line=nothing)
+    if expr isa LineNumberNode
+        return expr.line, false
+    end
+
+    if expr isa Expr
+        # Handle Expr(:line, ...) nodes emitted by JuliaSyntax
+        if expr.head === :line && length(expr.args) >= 1
+            line_num = expr.args[1]
+            if line_num isa Integer
+                return Int(line_num), false
+            end
+        end
+        
+        if expr.head === :error
+            # Found an error, return the last seen line number
+            return last_line, true
+        end
+
+        current_line = last_line
+        for arg in expr.args
+            line_result, found_error = find_error_line(arg, current_line)
+            if found_error
+                return line_result, true
+            end
+            if line_result !== nothing && !found_error
+                current_line = line_result
+            end
+        end
+    end
+
+    return nothing, false
+end
 
 """
 FileCoverage
@@ -140,6 +195,87 @@ function process_cov(filename, folder)
 end
 
 """
+    detect_syntax_version(filename::AbstractString) -> VersionNumber
+
+Detect the appropriate Julia syntax version for parsing a source file by looking
+for the nearest project file (Project.toml or JuliaProject.toml) and reading its
+syntax version configuration, or by looking for the VERSION file in Julia's own
+source tree (for base/ files).
+
+Defaults to v"1.14" if no specific version is found, as JuliaSyntax generally
+maintains backwards compatibility with older syntax.
+"""
+function detect_syntax_version(filename::AbstractString)
+    dir = dirname(abspath(filename))
+    # Walk up the directory tree looking for project file or VERSION file
+    while true
+        # Check for project file first (for packages and stdlib)
+        # Use Base.locate_project_file to handle both Project.toml and JuliaProject.toml
+        project_file = Base.locate_project_file(dir)
+
+        if project_file !== nothing && project_file !== true && isfile(project_file)
+            # Use Base.project_file_load_spec if available (Julia 1.14+)
+            # This properly handles syntax.julia_version entries
+            if isdefined(Base, :project_file_load_spec)
+                spec = Base.project_file_load_spec(project_file, "")
+                return spec.julia_syntax_version
+            else
+                # Fallback for older Julia versions - only check syntax.julia_version
+                project = TOML.tryparsefile(project_file)
+                if !(project isa Base.TOML.ParserError)
+                    syntax_table = get(project, "syntax", nothing)
+                    if syntax_table !== nothing
+                        jv = get(syntax_table, "julia_version", nothing)
+                        if jv !== nothing
+                            try
+                                return VersionNumber(jv)
+                            catch e
+                                e isa ArgumentError || rethrow()
+                            end
+                        end
+                    end
+                end
+            end
+        end
+
+        # Check for VERSION file (for Julia's own base/ source without project file)
+        version_file = joinpath(dir, "VERSION")
+        if isfile(version_file)
+            version_str = nothing
+            try
+                version_str = strip(read(version_file, String))
+            catch e
+                e isa SystemError || rethrow()
+                # If we can't read VERSION, continue searching
+            end
+            if version_str !== nothing
+                # Parse version string like "1.14.0-DEV"
+                m = match(r"^(\d+)\.(\d+)", version_str)
+                if m !== nothing
+                    try
+                        major = parse(Int, m.captures[1])
+                        minor = parse(Int, m.captures[2])
+                        return VersionNumber(major, minor)
+                    catch e
+                        e isa ArgumentError || rethrow()
+                        # If we can't parse VERSION, continue searching
+                    end
+                end
+            end
+        end
+
+        parent = dirname(dir)
+        if parent == dir  # reached root
+            break
+        end
+        dir = parent
+    end
+    # Default to v"1.14" - JuliaSyntax maintains backwards compatibility
+    # so using a recent version generally works for older code
+    return v"1.14"
+end
+
+"""
     amend_coverage_from_src!(coverage::Vector{CovCount}, srcname)
     amend_coverage_from_src!(fc::FileCoverage)
 
@@ -168,6 +304,12 @@ function amend_coverage_from_src!(fc::FileCoverage)
         push!(linepos, position(io))
     end
     pos = 1
+    # Detect the appropriate syntax version for this package
+    syntax_version = detect_syntax_version(fc.filename)
+    # When parsing, use the detected syntax version to ensure we can parse
+    # all syntax features available in that version, even when running under
+    # a different Julia version (e.g., parsing Julia 1.14 code with Julia 1.11).
+    # JuliaSyntax provides version-aware parsing for any Julia version.
     while pos <= length(content)
         # We now want to convert the one-based offset pos into a line
         # number, by looking it up in linepos. But linepos[i] contains the
@@ -177,13 +319,63 @@ function amend_coverage_from_src!(fc::FileCoverage)
         # that later on to shift other one-based line numbers, we must
         # subtract 1 from the offset to make it zero-based.
         lineoffset = searchsortedlast(linepos, pos - 1) - 1
+        # 1-based line number for error reporting (lineoffset is 0-based)
+        current_line = lineoffset + 1
 
         # now we can parse the next chunk of the input
-        ast, pos = Meta.parse(content, pos; raise=false)
+        local ast, newpos
+        try
+            ast, newpos = JuliaSyntax.parsestmt(Expr, content, pos;
+                                                version=syntax_version,
+                                                ignore_errors=true,
+                                                ignore_warnings=true)
+        catch e
+            if isa(e, JuliaSyntax.ParseError)
+                throw(Base.Meta.ParseError("parsing error in $(fc.filename):$current_line: $e", e))
+            end
+            rethrow()
+        end
+
+        # If position didn't advance, we have a malformed token/byte - throw error
+        if newpos <= pos
+            throw(Base.Meta.ParseError("parsing error in $(fc.filename):$current_line: parser did not advance", nothing))
+        end
+        pos = newpos
+
         isa(ast, Expr) || continue
-        if ast.head ∈ (:error, :incomplete)
-            line = searchsortedlast(linepos, pos - 1)
-            throw(Base.Meta.ParseError("parsing error in $(fc.filename):$line: $(ast.args[1])"))
+        # Compute line number based on parse position (compatible with Meta.parse behavior)
+        error_line_from_pos = searchsortedlast(linepos, pos - 1)
+
+        # For files with only actual parse errors (not end-of-file), we should throw
+        # But we need to distinguish real errors from benign cases
+        if ast.head === :error
+            errmsg = isempty(ast.args) ? "" : string(ast.args[1])
+            # Only treat as EOF if we're actually at end of content AND it's an empty error or premature EOF
+            if pos >= length(content) && (isempty(errmsg) || occursin("premature end of input", errmsg))
+                break  # Done parsing, no more content
+            end
+            # Real parse error - throw it
+            throw(Base.Meta.ParseError("parsing error in $(fc.filename):$current_line: $errmsg", nothing))
+        end
+        # Check if the AST contains any embedded :error nodes (from ignore_errors=true).
+        # When we can't locate an explicit line node, fall back to the parse position
+        # to preserve Meta.parse-style error line reporting across statements.
+        if has_embedded_errors(ast)
+            # Try to find the actual line where the error occurred
+            error_internal_line, found = find_error_line(ast)
+            if found && error_internal_line !== nothing
+                # error_internal_line is relative to the parsed content (1-based)
+                # We need to add lineoffset to get the actual file line
+                error_line = lineoffset + error_internal_line
+                throw(Base.Meta.ParseError("parsing error in $(fc.filename):$error_line", nothing))
+            else
+                # Fallback to the line where we started parsing this statement
+                throw(Base.Meta.ParseError("parsing error in $(fc.filename):$error_line_from_pos", nothing))
+            end
+        end
+        # Incomplete expressions indicate truncated/malformed code - treat as parse error
+        if ast.head === :incomplete
+            throw(Base.Meta.ParseError("parsing error in $(fc.filename):$current_line: incomplete expression", nothing))
         end
         flines = function_body_lines(ast, coverage, lineoffset)
         if !isempty(flines)
