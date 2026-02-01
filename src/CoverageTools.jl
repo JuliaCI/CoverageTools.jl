@@ -18,11 +18,24 @@ const CovCount = Union{Nothing,Int}
 """
     has_embedded_errors(expr)
 
-Recursively check if an expression contains any `:error` nodes.
+Recursively check if an expression contains any `:error` nodes that represent
+actual parse errors. This excludes false positives like `Expr(:error, :symbol)`
+which appear when JuliaSyntax parses `break label` where `label` happens to be
+named `:error` or other keywords.
+
+True parse errors either have no arguments `Expr(:error)` or have string messages.
 """
 function has_embedded_errors(expr)
     expr isa Expr || return false
-    expr.head === :error && return true
+    if expr.head === :error
+        # Expr(:error, :symbol) appears from "break symbol" where symbol is a label name
+        # This is not a parse error, just unfortunate naming when the label is :error, :done, etc.
+        # Real parse errors are Expr(:error) with no args or Expr(:error, "message string")
+        if length(expr.args) == 1 && expr.args[1] isa Symbol
+            return false  # This is a label reference, not a parse error
+        end
+        return true  # This is a real parse error
+    end
     return any(has_embedded_errors, expr.args)
 end
 
@@ -46,7 +59,7 @@ function find_error_line(expr, last_line=nothing)
                 return Int(line_num), false
             end
         end
-        
+
         if expr.head === :error
             # Found an error, return the last seen line number
             return last_line, true

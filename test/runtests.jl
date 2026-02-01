@@ -49,6 +49,19 @@ end
     # Test no error
     ast_no_error = Expr(:block, :(x = 1), :(y = 2))
     @test !CoverageTools.has_embedded_errors(ast_no_error)
+    
+    # Test Expr(:error, :symbol) from "break label" is NOT treated as an error
+    # This can occur when JuliaSyntax parses "break error" where "error" is a label name
+    ast_break_label = Expr(:&&, :(val === nothing), :(break), Expr(:error, :error))
+    @test !CoverageTools.has_embedded_errors(ast_break_label)
+    
+    # Test with other label names
+    ast_break_done = Expr(:block, Expr(:error, :done))
+    @test !CoverageTools.has_embedded_errors(ast_break_done)
+    
+    # But real error messages (strings) should still be detected
+    ast_real_error = Expr(:block, Expr(:error, "syntax error"))
+    @test CoverageTools.has_embedded_errors(ast_real_error)
 end
 
 withenv("DISABLE_AMEND_COVERAGE_FROM_SRC" => nothing) do
