@@ -53,14 +53,14 @@ jobs:
       - uses: julia-actions/julia-buildpkg@v1
       - uses: julia-actions/julia-runtest@v1
       - uses: julia-actions/julia-processcoverage@v1
-      - uses: codecov/codecov-action@v5
+      - uses: codecov/codecov-action@v6
         # (NOT pull request) OR ( (pull request) AND (NOT from a fork) )
         # In this case, secrets are available, so we can use the `CODECOV_TOKEN`.
         if: github.event_name != 'pull_request' || github.repository == github.event.pull_request.head.repo.full_name
         with:
           file: lcov.info
           token: ${{ secrets.CODECOV_TOKEN }}
-      - uses: codecov/codecov-action@v5
+      - uses: codecov/codecov-action@v6
         # (pull request) AND (from a fork)
         # In this case, secrets are NOT available, so we have to rely on Codecov's "tokenless uploads for GitHub Actions" feature.
         if: github.event_name == 'pull_request' && github.repository != github.event.pull_request.head.repo.full_name
