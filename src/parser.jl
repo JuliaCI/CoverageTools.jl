@@ -75,7 +75,9 @@ function function_body_lines!(flines, ast::Expr, coverage::Vector{CovCount}, lin
             append!(flines, flines_new)
         end
     else
-        for arg in args
+        for (i, arg) in enumerate(args)
+            # The second macrocall argument records its location, not a statement.
+            ast.head == :macrocall && i == 2 && arg isa LineNumberNode && continue
             function_body_lines!(flines, arg, coverage, lineoffset, infunction)
         end
     end
