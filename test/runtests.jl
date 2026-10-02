@@ -384,6 +384,30 @@ end # testset
             CoverageTools.function_body_lines!(flines, ast, coverage, lineoffset, infunction)
             @test flines == [12345]
         end
+
+        @testset "macro call locations" begin
+            ast = Expr(:macrocall, Symbol("@m"), LineNumberNode(10),
+                       Expr(:block, LineNumberNode(11)))
+            lines = Int[]
+            CoverageTools.function_body_lines!(lines, ast, CoverageTools.CovCount[], 0, true)
+            @test lines == [11]
+
+            source = "function f(x)\n    return sum(\n        @view(x[1:1]),\n    )\nend\n"
+            fc = FileCoverage("macrocall.jl", source, CoverageTools.CovCount[nothing for _ in 1:5])
+            amend_coverage_from_src!(fc)
+            @test fc.coverage == CoverageTools.CovCount[0, 0, nothing, nothing, nothing]
+
+            # A macro call used as a statement still counts as a body line.
+            source = "function g(x)\n    @show x\nend\n"
+            fc = FileCoverage("macrocall.jl", source, CoverageTools.CovCount[nothing for _ in 1:3])
+            amend_coverage_from_src!(fc)
+            @test fc.coverage == CoverageTools.CovCount[0, 0, nothing]
+
+            source = "h(x) =\n    @inbounds x[1]\n"
+            fc = FileCoverage("macrocall.jl", source, CoverageTools.CovCount[nothing, nothing])
+            amend_coverage_from_src!(fc)
+            @test fc.coverage == CoverageTools.CovCount[0, nothing]
+        end
     end
 end
 
