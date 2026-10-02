@@ -1,5 +1,6 @@
 using CoverageTools
 using Test
+import Logging
 
 if Base.VERSION < v"1.1"
     isnothing(x) = false
@@ -400,6 +401,95 @@ end
                 @test isfile(source_file)
                 @test !isfile(cov_file)
             end
+        end
+    end
+end
+
+# Regressions for short and empty .cov lines (#70 and #92).
+@testset "malformed coverage files" begin
+    @testset "parse_cov_count" begin
+        parse_cov_count = CoverageTools.parse_cov_count
+
+        # Lines as written by Julia itself
+        @test parse_cov_count("        - # just a comment") === nothing
+        @test parse_cov_count("        - ") === nothing
+        @test parse_cov_count("        0 f(x) = x") === 0
+        @test parse_cov_count("        1 f(x) = x") === 1
+        @test parse_cov_count("       42 f(x) = x") === 42
+        @test parse_cov_count("999999999 f(x) = x") === 999999999
+        # Source code containing spaces, digits, and dashes
+        @test parse_cov_count("        3     y = 1 - 2") === 3
+        # Julia pads the count to nine characters but uses more room for
+        # counts that do not fit; these must not be cut off
+        @test parse_cov_count("1234567890 f(x) = x") === 1234567890
+        @test parse_cov_count("$(typemax(Int)) f(x) = x") === typemax(Int)
+
+        # The empty line of issue #92 and the short lines of issue #70
+        @test parse_cov_count("") === missing
+        @test parse_cov_count("   ") === missing
+        @test parse_cov_count("        ") === missing
+        # A count cut off by a truncated line is unusable since we cannot
+        # tell how many of its digits are missing
+        @test parse_cov_count("     1") === missing
+        @test parse_cov_count("      12") === missing
+        # Other ways in which a corrupted line can look
+        @test parse_cov_count("      1x f(x) = x") === missing
+        @test parse_cov_count("f(x) = x") === missing
+        # A count too large to be represented as an `Int`
+        @test parse_cov_count("$(widen(typemax(Int)) + 1) f(x) = x") === missing
+
+        # The source portion need not be valid UTF-8.
+        @test parse_cov_count(String(vcat(codeunits("        7 s = \"ä"),
+                                          UInt8[0xc3]))) === 7
+        # Invalid UTF-8 within the count itself is malformed, but must not
+        # throw a `StringIndexError` either
+        @test parse_cov_count(String(UInt8[0x80, 0x31, 0x20, 0x78])) === missing
+        @test parse_cov_count("        -") === missing
+        @test parse_cov_count("        -x") === missing
+        @test parse_cov_count("- x") === missing
+        @test parse_cov_count("         1 x") === missing
+        @test parse_cov_count("       1 x") === missing
+    end
+
+    @testset "process_cov" begin
+        mktempdir() do dir
+            srcname = joinpath(dir, "malformed.jl")
+            write(srcname, "f(x) = x + 1\ng(x) = x - 1\nf(1)\ng(1)\n")
+
+            # An empty line in the middle of the file, cf. issue #92
+            covname = srcname * ".1234.cov"
+            write(covname, "        1 f(x) = x + 1\n\n        1 f(1)\n        - g(1)\n")
+            coverage = @test_logs (:warn, r"1 malformed coverage line.*line 2") match_mode=:any process_cov(srcname, dir)
+            # The empty line must not shift the counts of the following lines
+            @test coverage == CoverageTools.CovCount[1, nothing, 1, nothing]
+
+            # A file truncated in the middle of a line, cf. issue #70
+            write(covname, "        1 f(x) = x + 1\n        2 g(x) = x - 1\n     ")
+            coverage = @test_logs (:warn, r"1 malformed coverage line.*line 3") match_mode=:any process_cov(srcname, dir)
+            @test coverage == CoverageTools.CovCount[1, 2, nothing]
+
+            # A well-formed file is merged with a malformed one, filling in
+            # the counts that got lost
+            write(joinpath(dir, "malformed.jl.5678.cov"),
+                  "        4 f(x) = x + 1\n        8 g(x) = x - 1\n        1 f(1)\n        1 g(1)\n")
+            coverage = @test_logs (:warn,) match_mode=:any process_cov(srcname, dir)
+            @test coverage == CoverageTools.CovCount[5, 10, 1, 1]
+
+            # A well-formed file alone must not warn
+            rm(covname)
+            coverage = @test_logs min_level=Logging.Warn process_cov(srcname, dir)
+            @test coverage == CoverageTools.CovCount[4, 8, 1, 1]
+        end
+    end
+
+    @testset "process_file with fewer coverage lines than source lines" begin
+        mktempdir() do dir
+            srcname = joinpath(dir, "truncated.jl")
+            write(srcname, "f(x) = x + 1\nf(1)\nf(2) # COV_EXCL_LINE\n")
+            # The coverage file stops before the excluded line
+            write(srcname * ".1234.cov", "        1 f(x) = x + 1\n        1 f(1)\n")
+            fc = process_file(srcname, dir)
+            @test fc.coverage == CoverageTools.CovCount[1, 1]
         end
     end
 end
