@@ -198,6 +198,9 @@ end # testset
         clean_folder(datadir_temp)
         # .cov files should be deleted
         @test !isfile(joinpath(datadir_temp, "CoverageTools.jl.cov"))
+        @test isfile(joinpath(datadir_temp, "testparser.jl.9172.mem"))
+        clean_folder(datadir_temp; include_memfiles=true)
+        @test !isfile(joinpath(datadir_temp, "testparser.jl.9172.mem"))
         # other files should remain untouched
         @test isfile(joinpath(datadir_temp, "CoverageTools.jl"))
         # tear down test data
@@ -281,10 +284,30 @@ end # testset
     error_eof = joinpath(srcdir, "error_eof.jl")
     @test_throws Base.Meta.ParseError process_file(error_eof, srcdir)
 
+    mktempdir() do dir
+        source = joinpath(dir, "unexpected_end.jl")
+        write(source, "end\n")
+        @test_throws Base.Meta.ParseError process_file(source, dir)
+    end
+
+    mktempdir() do dir
+        source = joinpath(dir, "nonascii.jl")
+        prefix = "x = \"" * repeat("α", 40) * "\"\n"
+        write(source, prefix * "function f()\n    1\nend\n")
+        @test process_file(source, dir).coverage == CoverageTools.CovCount[nothing, 0, 0, nothing]
+
+        write(source, prefix * "function f()\n")
+        @test_throws Base.Meta.ParseError process_file(source, dir)
+    end
+
     clean_folder(srcdir)
 end # testset
 
 @testset "Syntax version detection" begin
+    @test CoverageTools.syntax_version_from_load_spec((julia_edition=(1, 14),
+                                                       julia_syntax_version=v"1.13")) == v"1.14"
+    @test CoverageTools.syntax_version_from_load_spec((julia_syntax_version=v"1.13",)) == v"1.13"
+
     # Test default version
     mktempdir() do dir
         testfile = joinpath(dir, "test.jl")
@@ -343,6 +366,11 @@ end # testset
         write(testfile, "x = 1")
         version = CoverageTools.detect_syntax_version(testfile)
         @test version == v"1.14"  # Falls back to default
+    end
+
+    mktempdir() do dir
+        write(joinpath(dir, "VERSION"), "999999999999999999999999999999.1")
+        @test CoverageTools.detect_syntax_version(joinpath(dir, "test.jl")) == v"1.14"
     end
 end # testset
 
@@ -417,13 +445,21 @@ end
             cd(tmp_dir) do
                 source_file = joinpath(tmp_dir, "foo.jl")
                 cov_file = joinpath(tmp_dir, "foo.jl.12345.cov")
+                mem_file = joinpath(tmp_dir, "foo.jl.12345.mem")
+                other_mem_file = joinpath(tmp_dir, "other.jl.12345.mem")
                 touch(source_file)
                 touch(cov_file)
+                touch(mem_file)
+                touch(other_mem_file)
                 @test isfile(source_file)
                 @test isfile(cov_file)
                 CoverageTools.clean_file(source_file)
                 @test isfile(source_file)
                 @test !isfile(cov_file)
+                @test isfile(mem_file)
+                CoverageTools.clean_file(source_file; include_memfiles=true)
+                @test !isfile(mem_file)
+                @test isfile(other_mem_file)
             end
         end
     end

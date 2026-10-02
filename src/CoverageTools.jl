@@ -227,6 +227,13 @@ function process_cov(filename, folder)
     return full_coverage
 end
 
+function syntax_version_from_load_spec(spec)
+    if hasproperty(spec, :julia_edition)
+        return VersionNumber(spec.julia_edition...)
+    end
+    return spec.julia_syntax_version
+end
+
 """
     detect_syntax_version(filename::AbstractString) -> VersionNumber
 
@@ -251,10 +258,7 @@ function detect_syntax_version(filename::AbstractString)
             # This properly handles syntax.julia_version entries
             if isdefined(Base, :project_file_load_spec)
                 spec = Base.project_file_load_spec(project_file, "")
-                if hasproperty(spec, :julia_edition)
-                    return VersionNumber(spec.julia_edition...)
-                end
-                return spec.julia_syntax_version
+                return syntax_version_from_load_spec(spec)
             else
                 # Fallback for older Julia versions - only check syntax.julia_version
                 project = TOML.tryparsefile(project_file)
@@ -288,13 +292,10 @@ function detect_syntax_version(filename::AbstractString)
                 # Parse version string like "1.14.0-DEV"
                 m = match(r"^(\d+)\.(\d+)", version_str)
                 if m !== nothing
-                    try
-                        major = parse(Int, m.captures[1])
-                        minor = parse(Int, m.captures[2])
+                    major = tryparse(Int, m.captures[1])
+                    minor = tryparse(Int, m.captures[2])
+                    if major !== nothing && minor !== nothing
                         return VersionNumber(major, minor)
-                    catch e
-                        e isa ArgumentError || rethrow()
-                        # If we can't parse VERSION, continue searching
                     end
                 end
             end
@@ -346,7 +347,7 @@ function amend_coverage_from_src!(fc::FileCoverage)
     # all syntax features available in that version, even when running under
     # a different Julia version (e.g., parsing Julia 1.14 code with Julia 1.11).
     # JuliaSyntax provides version-aware parsing for any Julia version.
-    while pos <= length(content)
+    while pos <= ncodeunits(content)
         # We now want to convert the one-based offset pos into a line
         # number, by looking it up in linepos. But linepos[i] contains the
         # zero-based offset of the start of line i; since pos is
@@ -358,24 +359,12 @@ function amend_coverage_from_src!(fc::FileCoverage)
         # 1-based line number for error reporting (lineoffset is 0-based)
         current_line = lineoffset + 1
 
-        # now we can parse the next chunk of the input
-        local ast, newpos
-        try
-            ast, newpos = JuliaSyntax.parsestmt(Expr, content, pos;
-                                                version=syntax_version,
-                                                ignore_errors=true,
-                                                ignore_warnings=true)
-        catch e
-            if isa(e, JuliaSyntax.ParseError)
-                throw(Base.Meta.ParseError("parsing error in $(fc.filename):$current_line: $e", e))
-            end
-            rethrow()
-        end
-
-        # If position didn't advance, we have a malformed token/byte - throw error
-        if newpos <= pos
-            throw(Base.Meta.ParseError("parsing error in $(fc.filename):$current_line: parser did not advance", nothing))
-        end
+        # JuliaSyntax returns error nodes with ignore_errors=true.
+        ast, newpos = JuliaSyntax.parsestmt(Expr, content, pos;
+                                            version=syntax_version,
+                                            ignore_errors=true,
+                                            ignore_warnings=true)
+        newpos > pos || throw(Base.Meta.ParseError("parsing error in $(fc.filename):$current_line: parser did not advance", nothing))
         pos = newpos
 
         isa(ast, Expr) || continue
@@ -387,7 +376,7 @@ function amend_coverage_from_src!(fc::FileCoverage)
         if ast.head === :error
             errmsg = isempty(ast.args) ? "" : string(ast.args[1])
             # Only treat as EOF if we're actually at end of content AND it's an empty error or premature EOF
-            if pos >= length(content) && (isempty(errmsg) || occursin("premature end of input", errmsg))
+            if pos >= ncodeunits(content) && (isempty(errmsg) || occursin("premature end of input", errmsg))
                 break  # Done parsing, no more content
             end
             # Real parse error - throw it
@@ -408,10 +397,6 @@ function amend_coverage_from_src!(fc::FileCoverage)
                 # Fallback to the line where we started parsing this statement
                 throw(Base.Meta.ParseError("parsing error in $(fc.filename):$error_line_from_pos", nothing))
             end
-        end
-        # Incomplete expressions indicate truncated/malformed code - treat as parse error
-        if ast.head === :incomplete
-            throw(Base.Meta.ParseError("parsing error in $(fc.filename):$current_line: incomplete expression", nothing))
         end
         flines = function_body_lines(ast, coverage, lineoffset)
         if !isempty(flines)
