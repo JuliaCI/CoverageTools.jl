@@ -159,7 +159,10 @@ end # testset
         run(`$(Base.julia_cmd()) --startup-file=no --code-coverage=user -e $cmdstr`)
         r = process_file(srcname, datadir)
 
-        target = if VERSION >= v"1.5-"
+        target = if VERSION >= v"1.14-"
+            # Julia 1.14 covers interpreted top-level code and defaults to hit counts.
+            CoverageTools.CovCount[nothing, 1, 1, 0, nothing, 1, nothing, 1, nothing, nothing, 0, nothing, 1, nothing, nothing, 0, 0, nothing, nothing, 1, nothing, nothing, 1, nothing, nothing, nothing, 1, nothing]
+        elseif VERSION >= v"1.5-"
             CoverageTools.CovCount[nothing, 1, nothing, 0, nothing, 0, nothing, nothing, nothing, nothing, 0, nothing, nothing, nothing, nothing, 0, 0, nothing, nothing, 0, nothing, nothing, nothing, nothing, nothing, nothing, nothing, nothing]
         else
             CoverageTools.CovCount[nothing, 2, nothing, 0, nothing, 0, nothing, nothing, nothing, nothing, 0, nothing, nothing, nothing, nothing, nothing, 0, nothing, nothing, 0, nothing, nothing, nothing, nothing, nothing, nothing, nothing, nothing, nothing]
@@ -169,11 +172,8 @@ end # testset
 
         covtarget = (sum(x -> x !== nothing && x > 0, target), sum(!isnothing, target))
         @test get_summary(r) == covtarget
-        if VERSION >= v"1.5-"
-            @test get_summary(process_folder(datadir)) == (98, 107)
-        else
-            @test get_summary(process_folder(datadir)) == (98, 106)
-        end
+        # Include the saved CoverageTools.jl coverage fixture.
+        @test get_summary(process_folder(datadir)) == (97, 100) .+ covtarget
 
         r_disabled = withenv("DISABLE_AMEND_COVERAGE_FROM_SRC" => "yes") do
             process_file(srcname, datadir)
