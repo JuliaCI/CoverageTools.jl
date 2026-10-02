@@ -218,6 +218,9 @@ function detect_syntax_version(filename::AbstractString)
             # This properly handles syntax.julia_version entries
             if isdefined(Base, :project_file_load_spec)
                 spec = Base.project_file_load_spec(project_file, "")
+                if hasproperty(spec, :julia_edition)
+                    return VersionNumber(spec.julia_edition...)
+                end
                 return spec.julia_syntax_version
             else
                 # Fallback for older Julia versions - only check syntax.julia_version
