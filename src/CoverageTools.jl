@@ -157,6 +157,29 @@ function merge_coverage_counts(as::Vector{FileCoverage}...)
     return source_files
 end
 
+# Julia writes a nine-byte count field (or a dash), then a space and the source.
+# Inspect only the ASCII prefix: the source portion need not be valid UTF-8.
+function parse_cov_count(line::AbstractString)
+    bytes = codeunits(line)
+    n = length(bytes)
+    i = 1
+    while i <= n && bytes[i] == UInt8(' ')
+        i += 1
+    end
+    i <= 9 && n >= 10 || return missing
+    if bytes[i] == UInt8('-')
+        return i == 9 && bytes[10] == UInt8(' ') ? nothing : missing
+    end
+    j = i
+    while j <= n && UInt8('0') <= bytes[j] <= UInt8('9')
+        j += 1
+    end
+    # The count ends in column nine unless it is too wide for that field.
+    (j <= n && bytes[j] == UInt8(' ') && (i == 1 ? j >= 10 : j == 10)) || return missing
+    count = tryparse(Int, SubString(line, i, j - 1))
+    return count === nothing ? missing : count
+end
+
 """
     process_cov(filename, folder) -> Vector{CovCount}
 
@@ -183,11 +206,21 @@ function process_cov(filename, folder)
     for file in files
         @info "CoverageTools.process_cov: processing $file"
         coverage = CovCount[]
-        for line in eachline(file)
-            # Columns 1:9 contain the coverage count
-            cov_segment = line[1:9]
-            # If coverage is NA, there will be a dash
-            push!(coverage, cov_segment[9] == '-' ? nothing : parse(Int, cov_segment))
+        malformed = 0
+        first_malformed = 0
+        for (lineno, line) in enumerate(eachline(file))
+            count = parse_cov_count(line)
+            if count === missing
+                # Keep the line's position so later counts still align.
+                first_malformed == 0 && (first_malformed = lineno)
+                malformed += 1
+                push!(coverage, nothing)
+            else
+                push!(coverage, count)
+            end
+        end
+        if malformed > 0
+            @warn "Ignoring $malformed malformed coverage line(s) in $file, starting at line $first_malformed"
         end
         full_coverage = merge_coverage_counts(full_coverage, coverage)
     end
@@ -405,7 +438,8 @@ function amend_coverage_from_src!(fc::FileCoverage)
 
             # also check for line markers
             if excluded || occursin("COV_EXCL_LINE", line)
-                coverage[l] = nothing
+                # A truncated .cov file may end before this source line.
+                l <= length(coverage) && (coverage[l] = nothing)
             end
         end
     end
